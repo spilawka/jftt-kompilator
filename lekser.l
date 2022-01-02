@@ -2,8 +2,8 @@ num -?[0-9]+
 pid [_a-z]+
 
 %{
-    //TODO #include tablica znakow
-    //void yyerror(char*,int)
+    #include "parser.tab.c"
+    void yyerror(char*);
     #include <stdio.h>
     #include <stdlib.h>
     int lines = 0;
@@ -12,56 +12,77 @@ pid [_a-z]+
 %x KOM
 
 %%
-"( )" |
 [ \t] ;
 
 \n { lines++; }
 
-"\( " {
+"\(" {
     BEGIN(KOM);
 }
 
-<KOM>("\( "([^" \)"])*" \)")|"( )" {
-    //yyerror("Zagnieżdżony komentarz!",lines);
-    printf("Zagnieżdżony komentarz!\n");
+<KOM>("\("([^"\)"])*"\)") {
+    yyerror("Zagnieżdżony komentarz!");
 }
 
-<KOM>" \)" {
+<KOM>"\)" {
     BEGIN(INITIAL);
 }
 
 <KOM>. ;
 
-PLUS|MINUS|TIMES|DIV|MOD |
-EQ|NEQ|LE|GE|LEQ|GEQ |
-ASSIGN |
-IF|THEN|ELSE|ENDIF |
-WHILE|DO|ENDWHILE|REPEAT |
-UNTIL|FROM|TO|DOWNTO |
-BEGIN|END|VAR {
-    printf("kom: %s\n",yytext);
-    //return *yytext;
-}
+PLUS { return PLUS; }
+MINUS { return MINUS; }
+TIMES { return TIMES; }
+DIV { return DIV; }
+MOD { return MOD; }
 
-[\[\]:,] {
-    printf("cf: %s\n",yytext);
-    //return *yytext;
+EQ { return EQ; }
+NEQ { return NEQ; }
+LE { return LE; }
+GE { return GE; }
+LEQ { return LEQ; }
+GEQ { return GEQ; }
+
+ASSIGN { return ASSIGN; }
+IF { return IF; }
+THEN { return THEN; }
+ELSE { return ELSE; }
+ENDIF { return ENDIF; }
+
+WHILE { return WHILE; }
+DO { return DO; }
+ENDWHILE { return ENDWHILE; }
+REPEAT { return REPEAT; }
+FOR { return FOR; }
+ENDFOR { return ENDFOR; }
+
+UNTIL { return UNTIL; }
+FROM { return FROM; }
+TO { return TO; }
+DOWNTO { return DOWNTO; }
+
+BEGIN { return BEG; }
+END { return END; }
+VAR { return VAR; }
+WRITE { return WRITE; }
+READ { return READ; }
+
+[\[\]:,;] {
+    return yytext[0];
 }
 
 {num} {
-    printf("num: %s\n",yytext);
-    //yylval = atoll(yytext);
-    //return num;
+    yylval.nb = atoll(yytext);
+    return num;
 }
 
 {pid} {
-    printf("pid: %s\n",yytext);
-    //yylval = yytext;
-    //return pidentifier;
+    yylval.pid = strdup(yytext);
+    return pidentifier;
 }
 
 . {
-    printf("Nierozpoznawalny symbol: Linia %d",lines);
+    printf("Nierozpoznawalny token: %s, Linia %d",yytext,lines);
 }
 
 %%
