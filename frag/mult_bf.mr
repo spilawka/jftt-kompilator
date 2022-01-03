@@ -1,0 +1,19 @@
+(Program mnoży 2 liczby liniowo - ex. mała stała vs zmienna)
+(ZAKŁADAMY b małe, b>0)
+GET (a)
+SWAP g
+GET (b)
+SWAP b
+RESET a
+(:loop)
+SWAP b
+JZERO 5
+DEC a
+SWAP b
+ADD g
+JUMP -5
+SWAP b
+PUT
+HALT
+
+
