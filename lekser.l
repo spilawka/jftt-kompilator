@@ -2,10 +2,12 @@ num -?[0-9]+
 pid [_a-z]+
 
 %{
-    #include "parser.tab.c"
-    void yyerror(char*);
     #include <stdio.h>
     #include <stdlib.h>
+    #include <string>
+    #include "parser.h"
+    void yyerror(char*);
+    void yyerrorline(std::string, int);
     int lines = 0;
 %}
 
@@ -14,14 +16,14 @@ pid [_a-z]+
 %%
 [ \t] ;
 
-\n { lines++; }
+\n { lines++; yylval.line = lines; }
 
 "\(" {
     BEGIN(KOM);
 }
 
 <KOM>("\("([^"\)"])*"\)") {
-    yyerror("Zagnieżdżony komentarz!");
+    yyerrorline("Zagnieżdżony komentarz!",lines);
 }
 
 <KOM>"\)" {
@@ -82,7 +84,9 @@ READ { return READ; }
 }
 
 . {
-    printf("Nierozpoznawalny token: %s, Linia %d",yytext,lines);
+    std::string s("Nierozpoznawalny token: ");
+    s += yytext;
+    yyerrorline(s,lines);
 }
 
 %%

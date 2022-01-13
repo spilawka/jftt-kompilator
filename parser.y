@@ -1,12 +1,20 @@
 %{
   #include <stdio.h>
+  #include <string>
+  #include <iostream>
+  #include "sym.hh"
+
+  using namespace std;
+
   int yylex(void);
   void yyerror(char*);
+  void yyerrorline(string,int);
 %}
 
 %union {
   char* pid;
   long long nb;
+  int line;
 }
 %token <pid> pidentifier
 %token <nb> num
@@ -21,15 +29,15 @@
 
 %%
 program:
-  VAR declarations BEG commands END {}
-| BEG commands END {}
+  VAR declarations BEG commands END {printSymbols(); }
+| BEG commands END { printSymbols(); }
 ;
 
 declarations:
-  declarations ',' pidentifier
-| declarations ',' pidentifier '[' num ':' num ']'
-| pidentifier { printf("zmienna: %s",$1); }
-| pidentifier '[' num ':' num ']'
+  declarations ',' pidentifier {if (getSymbol($3)==0) putSymbol($3); else yyerrorline("Zmienna istnieje!",yylval.line);}
+| declarations ',' pidentifier '[' num ':' num ']' {if (getSymbol($3)==0) putSymbolTable($3,$5,$7); else yyerrorline("Zmienna istnieje!",yylval.line); }
+| pidentifier {if (getSymbol($1)==0) putSymbol($1); else yyerrorline("Zmienna istnieje!",yylval.line); }
+| pidentifier '[' num ':' num ']' {if (getSymbol($1)==0) putSymbolTable($1,$3,$5); else yyerrorline("Zmienna istnieje!",yylval.line); }
 ;
 
 commands:
@@ -76,6 +84,10 @@ identifier:
 | pidentifier '[' pidentifier ']' {}
 | pidentifier '[' num ']' {}
 %%
+
+void yyerrorline(string e, int i) {
+    cerr<<"Linia "<<i<<" "<<e<<endl;
+}
 
 void yyerror(char* s) {
     printf("Błąd: %s\n",s);
