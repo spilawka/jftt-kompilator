@@ -7,8 +7,8 @@ pid [_a-z]+
     #include <string>
     #include "parser.h"
     void yyerror(char*);
-    void yyerrorline(std::string, int);
-    int lines = 0;
+    void yyerrorline(std::string, long long);
+    long long lines = 0;
 %}
 
 %x KOM

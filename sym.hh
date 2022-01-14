@@ -1,69 +1,59 @@
-#include <string.h>
-#include <stdbool.h>
-#include <string>
-#include <stdio.h>
-
-using namespace std;
-
-struct symbol {
-    string name;
+struct varData {
     bool isTable;
     long long start;
     long long end;
-    struct symbol* next;
 };
 
-struct symbol* table = 0;
+typedef struct varData varData;
 
-struct symbol* putSymbol(char* symname) {
+map<string,varData> varTable = {};
+
+bool hasSymbol(char* symname){
+    return varTable.count(string(symname))==1;
+}
+
+bool putSymbol(char* symname) {
+    string str(symname);
+
+    if (hasSymbol(symname)) return false;
+
     //nowy symbol
-    struct symbol* s = new struct symbol();
-    s->name = string(symname);
-    s->isTable = false;
-    s->next = table;
-    table = s;
-    return s;
+    varData s;
+    s.isTable = false;
+    varTable[str] = s;
+    return true;
 }
 
-struct symbol* putSymbolTable(char* symname, long long start, long long end) {
-    struct symbol* s = new struct symbol();
-    s->name = string(symname);
-    s->isTable = true;
-    s->start = start;
-    s->end = end;
-    s->next = table;
-    table = s;
-    return s;
+bool putSymbolTable(char* symname, long long start, long long end) {
+    string str(symname);
+
+    auto find = varTable.find(str);
+    if (find != varTable.end()) return false;
+
+    //nowy symbol
+    varData s;
+    s.isTable = true;
+    s.start = start;
+    s.end = end;
+
+    varTable[str] = s;
+    return true;
 }
 
-struct symbol* getSymbol(char* symname) {
-    struct symbol* s = table;
-    while(s != 0) {
-        if (s->name == symname)
-            return s;
-        
-        s = s->next;
-    }
-    return 0;
+varData getSymbol(char* symname) {
+    return varTable[string(symname)];
 }
 
-bool isInBounds(struct symbol* tn, long long id) {
-    if (!tn->isTable) return false;
+bool isInBounds(varData vd, long long id) {
+    if (!vd.isTable) return false;
 
-    if (id < tn->start || id > tn->end) return false;
+    if (id < vd.start || id > vd.end) return false;
     return true;
 }
 
 void printSymbols() {
-    struct symbol* s = table;
-    printf("Symbols:\n");
-    while (s!=0) {
-        if (!s->isTable) {
-            cout<<' '<<s->name;
-        }
-        else {
-            cout<<' '<<s->name<<'['<<s->start<<':'<<s->end<<']';
-        }
-        s = s->next;
+    for (auto const& s: varTable) {
+        if (s.second.isTable) cout<<s.first<<"["<<s.second.start<<":"<<s.second.end<<"] ";
+        else cout<<s.first<<" ";
     }
 }
