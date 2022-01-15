@@ -8,54 +8,33 @@
   #include <vector>
 
   using namespace std;
-
-  #include "vmInstructions.hh"
-  #include "sym.hh"
-  #include "codeGen.hh"
-
   int yylex(void);
   void yyerror(string);
   void yyerrorline(string,long long);
+  long long cfID = 1;
+  long long condID = 1;
 
-  long long globalID = 0;
-
-  struct cfinfo {
-    long long ID;
-  };
-
-  struct varinfo {
-    bool constant;
-    bool init;
-    string name;
-    bool isTableElem;
-    long long index;
-  };
-
-  typedef struct varinfo* vip;
-
-  vector<vip> varInfos;
-
-  vip makeVarInfo(bool constant, long long value, char* name) {
-    vip s = new struct varinfo;
-    s->constant = constant;
-    s->init = false;
-    s->name = string(name);
-
-    varInfos.push_back(s);
-    return s;
-  }
+  #include "vmInstructions.hh"
+  #include "sym.hh"
+  #include "valinfo.hh"
+  #include "cominfo.hh"
+  #include "codeGen.hh"
 %}
 
 %union {
   char* pid;
   long long nb;
   long long line;
-  vip myvip;
+  struct valinfo vi;
+  struct cominfo* ci;
+  struct cominfo** cip;
 }
 %token <pid> pidentifier
 %token <nb> num
-%nterm <myvip> identifier
-%nterm <myvip> value
+%nterm <vi> identifier
+%nterm <vi> value
+%nterm <ci> command
+%nterm <cip> commands
 
 %token VAR BEG END
 %token PLUS MINUS TIMES DIV MOD
@@ -67,43 +46,80 @@
 
 %%
 program:
-  VAR declarations BEG commands END {printSymbols();}
-| BEG commands END {printSymbols();}
+  VAR declarations BEG commands END {
+    printSymbols();
+    struct cominfo* root = genComInfo(c_ROOT,cfID++);
+    insertChildren(root,$4);
+    printChildren(root);
+  }
+| BEG commands END {
+    printSymbols();
+  }
 ;
 
 declarations:
   declarations ',' pidentifier 
-    { if (!putSymbol($3)) yyerrorline("Zmienna istnieje!",yylval.line); }
+    { if (!putSymbol($3,GLOBAL)) yyerrorline("Zmienna istnieje!",yylval.line); }
 | declarations ',' pidentifier '[' num ':' num ']'
-    { if($5>$7) yyerrorline("Błędny zakres tablicy "+string($3),yylval.line); if (!putSymbolTable($3,$5,$7)) yyerrorline("Zmienna istnieje!",yylval.line); }
+    { if($5>$7) yyerrorline("Błędny zakres tablicy "+string($3),yylval.line); if (!putSymbolTable($3,$5,$7,GLOBAL)) yyerrorline("Talica istnieje!",yylval.line); }
 | pidentifier 
-    { if (!putSymbol($1)) yyerrorline("Zmienna istnieje!",yylval.line); }
+    { if (!putSymbol($1,GLOBAL)) yyerrorline("Zmienna istnieje!",yylval.line); }
 | pidentifier '[' num ':' num ']' 
-    { if($3>$5) yyerrorline("Błędny zakres tablicy "+string($1),yylval.line); if (!putSymbolTable($1,$3,$5)) yyerrorline("Zmienna istnieje!",yylval.line); }
+    { if($3>$5) yyerrorline("Błędny zakres tablicy "+string($1),yylval.line); if (!putSymbolTable($1,$3,$5,GLOBAL)) yyerrorline("Tablica istnieje!",yylval.line); }
 ;
 
 commands:
-  commands command {}
-| command {}
+  commands command {
+    $2->next = *$$;
+    *$$ = $2;
+  }
+| command {
+    $$ = new struct cominfo*;
+    $1->next = 0;
+    *$$ = $1;
+  }
 ;
 
 command:
   identifier ASSIGN expression ';' {
-    $1->init = true;
+    $$ = genComInfo(c_ASSIGN,0);
   }
-| IF condition THEN commands ELSE commands ENDIF {}
-| IF condition THEN commands ENDIF {}
-| WHILE condition DO commands ENDWHILE {}
-| REPEAT commands UNTIL condition ';' {}
-| FOR pidentifier FROM value TO value DO commands ENDFOR {}
-| FOR pidentifier FROM value DOWNTO value DO commands ENDFOR {}
-| READ identifier ';' {}
-| WRITE value ';' {}
+| IF condition THEN commands ELSE commands ENDIF {
+    $$ = genComInfo(c_IFELSE,cfID++);
+    insertChildren($$,$4);
+    insertChildren($$,$6);
+  }
+| IF condition THEN commands ENDIF {
+    $$ = genComInfo(c_IF,cfID++);
+    insertChildren($$,$4);
+  }
+| WHILE condition DO commands ENDWHILE {
+    $$ = genComInfo(c_WHILE,cfID++);
+    insertChildren($$,$4);
+  }
+| REPEAT commands UNTIL condition ';' {
+    $$ = genComInfo(c_REPEAT,cfID++);
+    insertChildren($$,$2);
+  }
+| FOR pidentifier FROM value TO value DO commands ENDFOR {
+    $$ = genComInfo(c_FORTO,cfID++);
+    insertChildren($$,$8);
+  }
+| FOR pidentifier FROM value DOWNTO value DO commands ENDFOR {
+    $$ = genComInfo(c_FORDOWNTO,cfID++);
+    insertChildren($$,$8);
+  }
+| READ identifier ';' {
+    $$ = genComInfo(c_READ,0);
+  }
+| WRITE value ';' {
+    $$ = genComInfo(c_WRITE,0);
+  }
 ;
 
 expression:
   value {
-    if (!$1->init) yyerrorline("Zmienna "+$1->name+" nie została zainicjowana!",yylval.line);
+
   }
 | value PLUS value {}
 | value MINUS value {}
@@ -123,7 +139,7 @@ condition:
 
 value:
   num {
-    $$ = makeVarInfo(true,$1,0);
+    $$ = makeValinfoNum($1);
   }
 | identifier {
     $$ = $1;
@@ -131,17 +147,18 @@ value:
 
 identifier:
   pidentifier {
-    if (!hasSymbol($1)) yyerrorline("Zmienna nie została zadeklarowana!",yylval.line);
-    $$ = makeVarInfo(false,0,$1);
+    //if (!hasSymbol($1)) yyerrorline("Zmienna "+string($1)+" nie została zadeklarowana!",yylval.line);
+    $$ = makeValinfoElem($1);
   }
 | pidentifier '[' pidentifier ']' {
-    if (!hasSymbol($1)) yyerrorline("Zmienna nie została zadeklarowana!",yylval.line);
-    $$ = makeVarInfo(false,0,$1);
+    //if (!hasSymbol($1)) yyerrorline("Tablica "+string($1)+" nie została zadeklarowana!",yylval.line);
+    //if (!hasSymbol($3)) yyerrorline("Zmienna "+string($3)+" nie została zadeklarowana!",yylval.line);
+    $$ = makeValinfoTElemID($1,$3);
   }
 | pidentifier '[' num ']' {
-    if (!hasSymbol($1)) yyerrorline("Zmienna nie została zadeklarowana!",yylval.line);
-    if (!isInBounds(getSymbol($1),$3)) yyerrorline("Wyjście poza zakres tablicy!",yylval.line);
-    $$ = makeVarInfo(false,0,$1);
+    //if (!hasSymbol($1)) yyerrorline("Tablica "+string($1)+" nie została zadeklarowana!",yylval.line);
+    //if (!isInBounds(getSymbol($1),$3)) yyerrorline("Wyjście poza zakres tablicy: "+string($1),yylval.line);
+    $$ = makeValinfoTElem($1,$3);
   }
 %%
 

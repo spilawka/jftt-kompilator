@@ -1,91 +1,95 @@
 #include <stack>
 
+struct reference {
+    bool isFinal;
+    bool isRegistry;
+    enum reg Registry;
+    long long memoryLoc;
+};
+
+vector<pair<enum instr, struct reference>> midCode;
 
 
-typedef stack<pair<enum instr, string>> insstack;
-
+typedef stack<pair<enum instr, enum reg>> insstack;
 /** Funkcja zwraca kod do generowania danej liczby od podstaw w kodzie maszynowym 
     @return stos LILO z kodem instrukcji oraz modyfikowanym rejestrem
+
+    REJESTRY: A,B
 */
-insstack genNumber(long long num) {
+void genNumber(long long num) {
     //stack z kodem maszynowym
     insstack code = {};
 
     //małe liczby (abs(n)<10)
     if (num == 0) {
-        code.push(make_pair(RESET,"a"));
-        return code;
+        code.push(make_pair(RESET,A));
     }
     else if (num > 0 && num < 10) {
         for (int i=0; i<num; i++)
-            code.push(make_pair(INC,"a"));
-        code.push(make_pair(RESET,"a"));
-        return code;
+            code.push(make_pair(INC,A));
+        code.push(make_pair(RESET,A));
     }
     else if (num > -10 && num < 0) {
         for (int i=0; i>num; i--) 
-            code.push(make_pair(DEC,"a"));
-        code.push(make_pair(RESET,"a"));
-        return code;
+            code.push(make_pair(DEC,A));
+        code.push(make_pair(RESET,A));
     }
-
-    //liczby ujemne - weź odwrotność i odejmij pod sam koniec
-    if (num<0) {
-        num = -num;
-        code.push(make_pair(SUB,"b"));
-        code.push(make_pair(RESET,"a"));
-        code.push(make_pair(SWAP,"b"));
-    }
-
-    //ilość występowania prostych wymnożeń razy dwa
-    long long conseq2 = 0;
-    while (num>0) {
-        long long modulo = num%2;
-
-        if (modulo == 0) {
-            conseq2++;
+    else {
+        //liczby ujemne - weź odwrotność i odejmij pod sam koniec
+        if (num<0) {
+            num = -num;
+            code.push(make_pair(SUB,B));
+            code.push(make_pair(RESET,A));
+            code.push(make_pair(SWAP,B));
         }
-        else {
-            if (conseq2==1) {
-                code.push(make_pair(SHIFT,"b"));
+
+        //ilość występowania prostych wymnożeń razy dwa
+        long long conseq2 = 0;
+        while (num>0) {
+            long long modulo = num%2;
+
+            if (modulo == 0) {
+                conseq2++;
             }
-            // dla więcej operacji optymalizacja - bardziej
-            // opłaca się zwiększać b niż wykonywać SHIFTy
-            else if (conseq2>1) {
-                code.push(make_pair(INC,"b"));
-                code.push(make_pair(RESET,"b"));
-                code.push(make_pair(SHIFT,"b"));
-                for(int i=1;i<conseq2;i++){
-                    code.push(make_pair(INC,"b"));
+            else {
+                if (conseq2==1) {
+                    code.push(make_pair(SHIFT,B));
                 }
-            }
-            conseq2=0;
+                // dla więcej operacji optymalizacja - bardziej
+                // opłaca się zwiększać b niż wykonywać SHIFTy
+                else if (conseq2>1) {
+                    code.push(make_pair(INC,B));
+                    code.push(make_pair(RESET,B));
+                    code.push(make_pair(SHIFT,B));
+                    for(int i=1;i<conseq2;i++){
+                        code.push(make_pair(INC,B));
+                    }
+                }
+                conseq2=0;
 
-            code.push(make_pair(INC,"a"));
-            if (num!=1)
-                code.push(make_pair(SHIFT,"b"));
+                code.push(make_pair(INC,A));
+                if (num!=1)
+                    code.push(make_pair(SHIFT,B));
+            }
+
+            num = num/2;
         }
 
-        num = num/2;
+        //reset rejestrów
+        code.push(make_pair(INC,B));
+        code.push(make_pair(RESET,B));
+        code.push(make_pair(RESET,A));
     }
-
-    //reset rejestrów
-    code.push(make_pair(INC,"b"));
-    code.push(make_pair(RESET,"b"));
-    code.push(make_pair(RESET,"a"));
-
-    return code;
-}
-
-void printCode(long long num) {
-    insstack code = genNumber(num);
 
     while (!code.empty()) {
-        pair<enum instr, string> elem = code.top();
-        cout<<instrName[elem.first]<<" "<<elem.second<<endl;
+        pair<enum instr, enum reg> elem = code.top();
+        struct reference r;
+        r.isFinal = true;
+        r.isRegistry = true;
+        r.Registry = elem.second;
+        
+        midCode.push_back(make_pair(elem.first,r));
+
         code.pop();
     }
-
-    cout<<"PUT"<<endl;
-    cout<<"HALT"<<endl;
 }

@@ -1,7 +1,10 @@
+enum Range {GLOBAL,LOCAL};
+
 struct varData {
     bool isTable;
     long long start;
     long long end;
+    enum Range range;
 };
 
 typedef struct varData varData;
@@ -12,7 +15,7 @@ bool hasSymbol(char* symname){
     return varTable.count(string(symname))==1;
 }
 
-bool putSymbol(char* symname) {
+bool putSymbol(char* symname, enum Range r)  {
     string str(symname);
 
     if (hasSymbol(symname)) return false;
@@ -20,11 +23,12 @@ bool putSymbol(char* symname) {
     //nowy symbol
     varData s;
     s.isTable = false;
+    s.range = r;
     varTable[str] = s;
     return true;
 }
 
-bool putSymbolTable(char* symname, long long start, long long end) {
+bool putSymbolTable(char* symname, long long start, long long end, enum Range r) {
     string str(symname);
 
     auto find = varTable.find(str);
@@ -35,6 +39,7 @@ bool putSymbolTable(char* symname, long long start, long long end) {
     s.isTable = true;
     s.start = start;
     s.end = end;
+    s.range = r;
 
     varTable[str] = s;
     return true;
