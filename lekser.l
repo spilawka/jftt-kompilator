@@ -8,22 +8,22 @@ pid [_a-z]+
     #include "parser.h"
     void yyerror(char*);
     void yyerrorline(std::string, long long);
-    long long lines = 0;
 %}
 
+%option yylineno
 %x KOM
 
 %%
 [ \t] ;
 
-\n { lines++; yylval.line = lines; }
+\n ;
 
 "\(" {
     BEGIN(KOM);
 }
 
 <KOM>("\("([^"\)"])*"\)") {
-    yyerrorline("Zagnieżdżony komentarz!",lines);
+    yyerrorline("Zagnieżdżony komentarz!",yylineno);
 }
 
 <KOM>"\)" {
@@ -86,7 +86,7 @@ READ { return READ; }
 . {
     std::string s("Nierozpoznawalny token: ");
     s += yytext;
-    yyerrorline(s,lines);
+    yyerrorline(s,yylineno);
 }
 
 %%

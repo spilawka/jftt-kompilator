@@ -6,36 +6,52 @@ struct valinfo {
     char* varName;
     long long index;
     char* indexName;
+    long long line;
 };
 
-struct valinfo makeValinfoNum(long long value){
-    struct valinfo vi;
-    vi.type = NUM;
-    vi.num = value;
+typedef struct valinfo valinfo;
+
+vector<valinfo*> valInfos = {};
+
+valinfo* makeValinfoNum(long long value, long long line){
+    valinfo* vi = new valinfo();
+    vi->type = NUM;
+    vi->num = value;
+    vi->line = line;
+
+    valInfos.push_back(vi);
     return vi;
 }
 
-struct valinfo makeValinfoElem(char* name){
-    struct valinfo vi;
-    vi.type = ELEM;
-    vi.varName = name;
+valinfo* makeValinfoElem(char* name, long long line){
+    valinfo* vi = new valinfo();
+    vi->type = ELEM;
+    vi->varName = name;
+    vi->line = line;
+
+    valInfos.push_back(vi);
     return vi;
 }
 
-struct valinfo makeValinfoTElem(char* name, long long index){
+valinfo* makeValinfoTElem(char* name, long long index, long long line){
+    valinfo* vi = new valinfo();
+    vi->type = TELEM;
+    vi->varName = name;
+    vi->index = index;
+    vi->line = line;
 
-    struct valinfo vi;
-    vi.type = TELEM;
-    vi.varName = name;
-    vi.index = index;
+    valInfos.push_back(vi);
     return vi;
 }
 
-struct valinfo makeValinfoTElemID(char* name, char* index){
-    struct valinfo vi;
-    vi.type = TELEMID;
-    vi.varName = name;
-    vi.indexName = index;
+valinfo* makeValinfoTElemID(char* name, char* index, long long line){
+    valinfo* vi = new valinfo();
+    vi->type = TELEMID;
+    vi->varName = name;
+    vi->indexName = index;
+    vi->line = line;
+    
+    valInfos.push_back(vi);
     return vi;
 }
  

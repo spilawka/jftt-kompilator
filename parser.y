@@ -13,21 +13,27 @@
   void yyerrorline(string,long long);
   long long cfID = 1;
   long long condID = 1;
+  extern int yylineno;
 
   #include "vmInstructions.hh"
   #include "sym.hh"
   #include "valinfo.hh"
   #include "cominfo.hh"
+  #include "exprinfo.hh"
+  #include "condinfo.hh"
   #include "codeGen.hh"
 %}
+
+%locations
 
 %union {
   char* pid;
   long long nb;
-  long long line;
-  struct valinfo vi;
-  struct cominfo* ci;
-  struct cominfo** cip;
+  valinfo* vi;
+  cominfo* ci;
+  cominfo** cip;
+  exprinfo* ei;
+  condinfo* cdi;
 }
 %token <pid> pidentifier
 %token <nb> num
@@ -35,6 +41,8 @@
 %nterm <vi> value
 %nterm <ci> command
 %nterm <cip> commands
+%nterm <ei> expression
+%nterm <cdi> condition
 
 %token VAR BEG END
 %token PLUS MINUS TIMES DIV MOD
@@ -48,7 +56,7 @@
 program:
   VAR declarations BEG commands END {
     printSymbols();
-    struct cominfo* root = genComInfo(c_ROOT,cfID++);
+    cominfo* root = genComInfo(c_ROOT,cfID++);
     insertChildren(root,$4);
     printChildren(root);
   }
@@ -59,22 +67,24 @@ program:
 
 declarations:
   declarations ',' pidentifier 
-    { if (!putSymbol($3,GLOBAL)) yyerrorline("Zmienna istnieje!",yylval.line); }
+    { if (!putSymbol($3,GLOBAL)) yyerrorline("Zmienna istnieje!",yylineno); }
 | declarations ',' pidentifier '[' num ':' num ']'
-    { if($5>$7) yyerrorline("Błędny zakres tablicy "+string($3),yylval.line); if (!putSymbolTable($3,$5,$7,GLOBAL)) yyerrorline("Talica istnieje!",yylval.line); }
+    { if($5>$7) yyerrorline("Błędny zakres tablicy "+string($3),yylineno); if (!putSymbolTable($3,$5,$7,GLOBAL)) yyerrorline("Talica istnieje!",yylineno); }
 | pidentifier 
-    { if (!putSymbol($1,GLOBAL)) yyerrorline("Zmienna istnieje!",yylval.line); }
+    { if (!putSymbol($1,GLOBAL)) yyerrorline("Zmienna istnieje!",yylineno); }
 | pidentifier '[' num ':' num ']' 
-    { if($3>$5) yyerrorline("Błędny zakres tablicy "+string($1),yylval.line); if (!putSymbolTable($1,$3,$5,GLOBAL)) yyerrorline("Tablica istnieje!",yylval.line); }
+    { if($3>$5) yyerrorline("Błędny zakres tablicy "+string($1),yylineno); if (!putSymbolTable($1,$3,$5,GLOBAL)) yyerrorline("Tablica istnieje!",yylineno); }
 ;
 
 commands:
   commands command {
-    $2->next = *$$;
-    *$$ = $2;
+    cominfo* t = *$1;
+    while (t->next != 0) t=t->next;
+    t->next = $2;
+    $$ = $1;
   }
 | command {
-    $$ = new struct cominfo*;
+    $$ = new cominfo*;
     $1->next = 0;
     *$$ = $1;
   }
@@ -121,25 +131,47 @@ expression:
   value {
 
   }
-| value PLUS value {}
-| value MINUS value {}
-| value TIMES value {}
-| value DIV value {}
-| value MOD value {}
+| value PLUS value {
+
+  }
+| value MINUS value {
+
+  }
+| value TIMES value {
+
+  }
+| value DIV value {
+
+  }
+| value MOD value {
+
+  }
 ;
 
 condition: 
-  value EQ value {}
-| value NEQ value {}
-| value LE value {}
-| value GE value {}
-| value LEQ value {}
-| value GEQ value {}
+  value EQ value {
+    $$ = createCondInfo($1,c_EQ,$3);
+  }
+| value NEQ value {
+    $$ = createCondInfo($1,c_NEQ,$3);
+  }
+| value LE value {
+    $$ = createCondInfo($1,c_LE,$3);
+  }
+| value GE value {
+    $$ = createCondInfo($1,c_GE,$3);
+  }
+| value LEQ value {
+    $$ = createCondInfo($1,c_LEQ,$3);
+  }
+| value GEQ value {
+    $$ = createCondInfo($1,c_GEQ,$3);
+  }
 ;
 
 value:
   num {
-    $$ = makeValinfoNum($1);
+    $$ = makeValinfoNum($1,yylineno);
   }
 | identifier {
     $$ = $1;
@@ -147,18 +179,16 @@ value:
 
 identifier:
   pidentifier {
-    //if (!hasSymbol($1)) yyerrorline("Zmienna "+string($1)+" nie została zadeklarowana!",yylval.line);
-    $$ = makeValinfoElem($1);
+    $$ = makeValinfoElem($1,yylineno);
+
   }
 | pidentifier '[' pidentifier ']' {
-    //if (!hasSymbol($1)) yyerrorline("Tablica "+string($1)+" nie została zadeklarowana!",yylval.line);
-    //if (!hasSymbol($3)) yyerrorline("Zmienna "+string($3)+" nie została zadeklarowana!",yylval.line);
-    $$ = makeValinfoTElemID($1,$3);
+    $$ = makeValinfoTElemID($1,$3,yylineno);
+
   }
 | pidentifier '[' num ']' {
-    //if (!hasSymbol($1)) yyerrorline("Tablica "+string($1)+" nie została zadeklarowana!",yylval.line);
-    //if (!isInBounds(getSymbol($1),$3)) yyerrorline("Wyjście poza zakres tablicy: "+string($1),yylval.line);
-    $$ = makeValinfoTElem($1,$3);
+    $$ = makeValinfoTElem($1,$3,yylineno);
+
   }
 %%
 
