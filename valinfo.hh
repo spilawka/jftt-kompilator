@@ -7,6 +7,7 @@ struct valinfo {
     long long index;
     char* indexName;
     long long line;
+    bool init;
 };
 
 typedef struct valinfo valinfo;
@@ -18,6 +19,7 @@ valinfo* makeValinfoNum(long long value, long long line){
     vi->type = NUM;
     vi->num = value;
     vi->line = line;
+    vi->init = false;
 
     valInfos.push_back(vi);
     return vi;
@@ -28,6 +30,7 @@ valinfo* makeValinfoElem(char* name, long long line){
     vi->type = ELEM;
     vi->varName = name;
     vi->line = line;
+    vi->init = false;
 
     valInfos.push_back(vi);
     return vi;
@@ -39,6 +42,7 @@ valinfo* makeValinfoTElem(char* name, long long index, long long line){
     vi->varName = name;
     vi->index = index;
     vi->line = line;
+    vi->init = false;
 
     valInfos.push_back(vi);
     return vi;
@@ -50,6 +54,7 @@ valinfo* makeValinfoTElemID(char* name, char* index, long long line){
     vi->varName = name;
     vi->indexName = index;
     vi->line = line;
+    vi->init = false;
     
     valInfos.push_back(vi);
     return vi;

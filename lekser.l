@@ -6,6 +6,7 @@ pid [_a-z]+
     #include <stdlib.h>
     #include <string>
     #include "parser.h"
+
     void yyerror(char*);
     void yyerrorline(std::string, long long);
 %}

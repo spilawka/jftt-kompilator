@@ -11,7 +11,7 @@
   int yylex(void);
   void yyerror(string);
   void yyerrorline(string,long long);
-  long long cfID = 1;
+  long long cfID = 0;
   long long condID = 1;
   extern int yylineno;
 
@@ -29,11 +29,11 @@
 %union {
   char* pid;
   long long nb;
-  valinfo* vi;
-  cominfo* ci;
-  cominfo** cip;
-  exprinfo* ei;
-  condinfo* cdi;
+  struct valinfo* vi;
+  struct cominfo* ci;
+  struct cominfo** cip;
+  struct exprinfo* ei;
+  struct condinfo* cdi;
 }
 %token <pid> pidentifier
 %token <nb> num
@@ -56,9 +56,10 @@
 program:
   VAR declarations BEG commands END {
     printSymbols();
-    cominfo* root = genComInfo(c_ROOT,cfID++);
+    cominfo* root = genComInfo(c_ROOT,0,0);
     insertChildren(root,$4);
     printChildren(root,0);
+    checkVariables(root);
   }
 | BEG commands END {
     printSymbols();
@@ -92,46 +93,48 @@ commands:
 
 command:
   identifier ASSIGN expression ';' {
-    $$ = genComInfo(c_ASSIGN,0);
+    $$ = genComInfo(c_ASSIGN,0,yylineno);
     insertComInfoData($$,0,0,$3,$1);
   }
 | IF condition THEN commands ELSE commands ENDIF {
-    $$ = genComInfo(c_IFELSE,cfID++);
+    $$ = genComInfo(c_IFELSE,++cfID,yylineno);
     insertComInfoData($$,0,$2,0,0);
     insertChildren($$,$4);
     insertChildren($$,$6);
   }
 | IF condition THEN commands ENDIF {
-    $$ = genComInfo(c_IF,cfID++);
+    $$ = genComInfo(c_IF,++cfID,yylineno);
     insertComInfoData($$,0,$2,0,0);
     insertChildren($$,$4);
   }
 | WHILE condition DO commands ENDWHILE {
-    $$ = genComInfo(c_WHILE,cfID++);
+    $$ = genComInfo(c_WHILE,++cfID,yylineno);
     insertComInfoData($$,0,$2,0,0);
     insertChildren($$,$4);
   }
 | REPEAT commands UNTIL condition ';' {
-    $$ = genComInfo(c_REPEAT,cfID++);
+    $$ = genComInfo(c_REPEAT,++cfID,yylineno);
     insertComInfoData($$,0,$4,0,0);
     insertChildren($$,$2);
   }
 | FOR pidentifier FROM value TO value DO commands ENDFOR {
-    $$ = genComInfo(c_FORTO,cfID++);
+    if (hasSymbol($2)) { yyerrorline("Istnieje symbol o nazwie "+string($2),yylineno); }
+    $$ = genComInfo(c_FORTO,++cfID,yylineno);
     insertComInfoData($$,makeComvar($2,$4,$6),0,0,0);
     insertChildren($$,$8);
   }
 | FOR pidentifier FROM value DOWNTO value DO commands ENDFOR {
-    $$ = genComInfo(c_FORDOWNTO,cfID++);
+    if (hasSymbol($2)) { yyerrorline("Istnieje symbol o nazwie "+string($2),yylineno); }
+    $$ = genComInfo(c_FORDOWNTO,++cfID,yylineno);
     insertComInfoData($$,makeComvar($2,$4,$6),0,0,0);
     insertChildren($$,$8);
   }
 | READ identifier ';' {
-    $$ = genComInfo(c_READ,0);
+    $$ = genComInfo(c_READ,0,yylineno);
     insertComInfoData($$,0,0,0,$2);
   }
 | WRITE value ';' {
-    $$ = genComInfo(c_WRITE,0);
+    $$ = genComInfo(c_WRITE,0,yylineno);
     insertComInfoData($$,0,0,0,$2);
   }
 ;
