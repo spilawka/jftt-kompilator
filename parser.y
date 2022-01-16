@@ -18,9 +18,9 @@
   #include "vmInstructions.hh"
   #include "sym.hh"
   #include "valinfo.hh"
-  #include "cominfo.hh"
   #include "exprinfo.hh"
   #include "condinfo.hh"
+  #include "cominfo.hh"
   #include "codeGen.hh"
 %}
 
@@ -58,7 +58,7 @@ program:
     printSymbols();
     cominfo* root = genComInfo(c_ROOT,cfID++);
     insertChildren(root,$4);
-    printChildren(root);
+    printChildren(root,0);
   }
 | BEG commands END {
     printSymbols();
@@ -93,58 +93,67 @@ commands:
 command:
   identifier ASSIGN expression ';' {
     $$ = genComInfo(c_ASSIGN,0);
+    insertComInfoData($$,0,0,$3,$1);
   }
 | IF condition THEN commands ELSE commands ENDIF {
     $$ = genComInfo(c_IFELSE,cfID++);
+    insertComInfoData($$,0,$2,0,0);
     insertChildren($$,$4);
     insertChildren($$,$6);
   }
 | IF condition THEN commands ENDIF {
     $$ = genComInfo(c_IF,cfID++);
+    insertComInfoData($$,0,$2,0,0);
     insertChildren($$,$4);
   }
 | WHILE condition DO commands ENDWHILE {
     $$ = genComInfo(c_WHILE,cfID++);
+    insertComInfoData($$,0,$2,0,0);
     insertChildren($$,$4);
   }
 | REPEAT commands UNTIL condition ';' {
     $$ = genComInfo(c_REPEAT,cfID++);
+    insertComInfoData($$,0,$4,0,0);
     insertChildren($$,$2);
   }
 | FOR pidentifier FROM value TO value DO commands ENDFOR {
     $$ = genComInfo(c_FORTO,cfID++);
+    insertComInfoData($$,makeComvar($2,$4,$6),0,0,0);
     insertChildren($$,$8);
   }
 | FOR pidentifier FROM value DOWNTO value DO commands ENDFOR {
     $$ = genComInfo(c_FORDOWNTO,cfID++);
+    insertComInfoData($$,makeComvar($2,$4,$6),0,0,0);
     insertChildren($$,$8);
   }
 | READ identifier ';' {
     $$ = genComInfo(c_READ,0);
+    insertComInfoData($$,0,0,0,$2);
   }
 | WRITE value ';' {
     $$ = genComInfo(c_WRITE,0);
+    insertComInfoData($$,0,0,0,$2);
   }
 ;
 
 expression:
   value {
-
+    $$ = createExprInfo($1,e_SOLO,0);
   }
 | value PLUS value {
-
+    $$ = createExprInfo($1,e_PLUS,$3);
   }
 | value MINUS value {
-
+    $$ = createExprInfo($1,e_MINUS,$3);
   }
 | value TIMES value {
-
+    $$ = createExprInfo($1,e_TIMES,$3);
   }
 | value DIV value {
-
+    $$ = createExprInfo($1,e_DIV,$3);
   }
 | value MOD value {
-
+    $$ = createExprInfo($1,e_MOD,$3);
   }
 ;
 

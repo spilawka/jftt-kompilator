@@ -5,14 +5,35 @@
 enum comInfoType {c_IF,c_IFELSE,c_WHILE,c_REPEAT,c_FORTO
 ,c_FORDOWNTO,c_ASSIGN,c_READ,c_WRITE,c_ROOT};
 
+string comNames[] = {"if","ifelse","while","repeat","for","fordown","assign","read","write","root"};
+
+struct comvar {
+    char* name;
+    valinfo* from;
+    valinfo* to;
+};
+
+struct comvar* makeComvar(char* name, valinfo* from, valinfo* to) {
+    struct comvar* c = new struct comvar;
+    c->name = name;
+    c->from = from;
+    c->to = to;
+    return c;
+}
+
 struct cominfo {
     enum comInfoType type;
-    struct cominfo* parent;
-    struct cominfo* next;
-
-    struct cominfo** children;
     long long ID;
     long long line;
+
+    struct cominfo* parent;
+    struct cominfo* next;
+    struct cominfo** children;
+
+    struct comvar* ifvar;
+    condinfo* ci;
+    exprinfo* ei;
+    valinfo* vi;
 };
 
 typedef struct cominfo cominfo;
@@ -27,8 +48,16 @@ cominfo* genComInfo(enum comInfoType t, long long ID) {
     *(ci->children) = 0;
     ci->ID = ID;
 
-    cominfos.push_back(ci);
+    comInfos.push_back(ci);
     return ci;
+}
+
+cominfo* insertComInfoData(cominfo* com,struct comvar* ifvar, condinfo* ci, exprinfo* ei, valinfo* vi) {
+    com->ifvar = ifvar;
+    com->ci = ci;
+    com->ei = ei;
+    com->vi = vi;
+    return com;
 }
 
 void insertChildren(cominfo* parent, cominfo** children) {
@@ -48,12 +77,28 @@ void insertChildren(cominfo* parent, cominfo** children) {
     }
 }
 
-void printChildren(cominfo* parent) {
+long long getChildrenLenght(cominfo* parent) {
+    cominfo* ptr = *(parent->children);
+    long long nb = 0;
+    while (ptr != 0) {
+        nb++;
+        ptr = ptr->next;
+    }
+    return nb;
+}
+
+void printChildren(cominfo* parent, int tabn) {
     cominfo* ptr = *(parent->children);
     while (ptr != 0) {
-        cout<<"{"<<ptr->type<<" "<<ptr->ID;
-        printChildren(ptr);
-        cout<<"}"<<endl;
+        for(int i=0;i<tabn;i++) cout<<"  ";
+        
+        cout<<comNames[ptr->type];
+        if (ptr->ID != 0)
+            cout<<"["<<ptr->ID<<"]";
+        cout<<endl;
+        
+        printChildren(ptr,tabn+1);
+        
         ptr = ptr->next;
     }
 }

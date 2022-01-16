@@ -9,7 +9,6 @@ struct reference {
 
 vector<pair<enum instr, struct reference>> midCode;
 
-
 typedef stack<pair<enum instr, enum reg>> insstack;
 /** Funkcja zwraca kod do generowania danej liczby od podstaw w kodzie maszynowym 
     @return stos LILO z kodem instrukcji oraz modyfikowanym rejestrem

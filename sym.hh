@@ -61,4 +61,5 @@ void printSymbols() {
         if (s.second.isTable) cout<<s.first<<"["<<s.second.start<<":"<<s.second.end<<"] ";
         else cout<<s.first<<" ";
     }
+    cout<<endl;
 }
