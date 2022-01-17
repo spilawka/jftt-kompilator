@@ -26,6 +26,7 @@ struct cominfo {
     enum comInfoType type;
     long long ID;
     long long line;
+    long long sep;
 
     struct cominfo* parent;
     struct cominfo* next;

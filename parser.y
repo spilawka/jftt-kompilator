@@ -17,11 +17,12 @@
 
   #include "vmInstructions.hh"
   #include "sym.hh"
-  #include "valinfo.hh"
-  #include "exprinfo.hh"
-  #include "condinfo.hh"
-  #include "cominfo.hh"
-  #include "codeGen.hh"
+  #include "nterms/valinfo.hh"
+  #include "nterms/exprinfo.hh"
+  #include "nterms/condinfo.hh"
+  #include "nterms/cominfo.hh"
+  #include "codegen/codeGen.hh"
+  #include "codegen/checkVal.hh"
 %}
 
 %locations
@@ -59,7 +60,19 @@ program:
     cominfo* root = genComInfo(c_ROOT,0,0);
     insertChildren(root,$4);
     printChildren(root,0);
+    cfID = 0;
     checkVariables(root);
+
+    cominfo* ch = *(root->children);
+      while (ch!=0) {
+        genCommand(ch);
+        ch = ch->next;
+    }
+    MCInsert(new MCEntry(mHALT,A));
+
+    for (auto v: midCode) {
+      printMCEntry(v);
+    }
   }
 | BEG commands END {
     printSymbols();
@@ -100,6 +113,7 @@ command:
     $$ = genComInfo(c_IFELSE,++cfID,yylineno);
     insertComInfoData($$,0,$2,0,0);
     insertChildren($$,$4);
+    $$->sep = getChildrenLenght($$);
     insertChildren($$,$6);
   }
 | IF condition THEN commands ENDIF {
@@ -126,7 +140,7 @@ command:
 | FOR pidentifier FROM value DOWNTO value DO commands ENDFOR {
     if (hasSymbol($2)) { yyerrorline("Istnieje symbol o nazwie "+string($2),yylineno); }
     $$ = genComInfo(c_FORDOWNTO,++cfID,yylineno);
-    insertComInfoData($$,makeComvar($2,$4,$6),0,0,0);
+    insertComInfoData($$,makeComvar($2,$6,$4),0,0,0);
     insertChildren($$,$8);
   }
 | READ identifier ';' {

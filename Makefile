@@ -11,7 +11,9 @@ all:
 	g++ ${CFLAGS} parser.o lexer.o -o ${program}
 
 clean:
-	rm *.o
 	rm parser.tab.c
 	rm lex.yy.c
+	rm parser.output
+	rm parser.h
+	rm *.o
 
