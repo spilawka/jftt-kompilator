@@ -134,13 +134,13 @@ command:
 | FOR pidentifier FROM value TO value DO commands ENDFOR {
     if (hasSymbol($2)) { yyerrorline("Istnieje symbol o nazwie "+string($2),yylineno); }
     $$ = genComInfo(c_FORTO,++cfID,yylineno);
-    insertComInfoData($$,makeComvar($2,$4,$6),0,0,0);
+    insertComInfoData($$,makeComvar($2,$4,$6),0,0,makeValinfoElem($2,yylineno));
     insertChildren($$,$8);
   }
 | FOR pidentifier FROM value DOWNTO value DO commands ENDFOR {
     if (hasSymbol($2)) { yyerrorline("Istnieje symbol o nazwie "+string($2),yylineno); }
     $$ = genComInfo(c_FORDOWNTO,++cfID,yylineno);
-    insertComInfoData($$,makeComvar($2,$6,$4),0,0,0);
+    insertComInfoData($$,makeComvar($2,$4,$6),0,0,makeValinfoElem($2,yylineno));
     insertChildren($$,$8);
   }
 | READ identifier ';' {

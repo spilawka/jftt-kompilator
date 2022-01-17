@@ -9,11 +9,10 @@ struct MCTag {
 };
 typedef struct MCTag MCTag;
 
-enum MCVarTypes {t_VAR,t_TAG,t_CONST,t_REG};
+enum MCVarTypes {t_VAL,t_TAG,t_REG};
 struct MCVar {
     enum MCVarTypes type;
-    char* name;
-    long long num;
+    valinfo* val;
     enum reg reg;
     MCTag tag;
 };
@@ -24,25 +23,19 @@ public:
     vector<MCTag> tags;
     enum MCinstr ins;
     MCVar* var;
-    MCVar* registry[8];
+    bool registry[8];
 
     MCEntry() {
         this->tags = {};
         this->var = new MCVar();
-        for(int i=0;i<8;i++) registry[i]=0;
     }
 
     /** Konstruktor dla stałej liczby*/
-    MCEntry(enum MCinstr i, long long num): MCEntry(){
-        this->ins = i;
-        this->var->type = t_CONST;
-        this->var->num = num;
-    }
     /** Konstruktor dla zmiennej*/
-    MCEntry(enum MCinstr i, char* name): MCEntry(){
+    MCEntry(enum MCinstr i, valinfo* v): MCEntry(){
         this->ins = i;
-        this->var->type = t_VAR;
-        this->var->name = name;
+        this->var->type = t_VAL;
+        this->var->val = v;
     }
     /** Konstruktor dla rejestru*/
     MCEntry(enum MCinstr i, enum reg reg): MCEntry(){
@@ -77,7 +70,7 @@ public:
 typedef class MCEntry MCEntry;
 
 vector<MCEntry*> midCode;
-MCVar* mcRegistry[8] = {0,0,0,0,0,0,0,0};
+bool mcRegistry[8] = {false,false,true,true,true,true,true,true};
 
 bool isTagQueued = false;
 MCTag queuedTag;
@@ -92,49 +85,25 @@ void MCInsert(MCEntry* newEntry) {
         newEntry->addTag(queuedTag);
         isTagQueued = false;
     }
+    for (int i=0;i<8;i++) {
+        newEntry->registry[i] = mcRegistry[i];
+    }
     
     midCode.push_back(newEntry);
 
-    
+
 }
 
 void genValue (valinfo* v, enum reg targetReg) {
-    switch (v->type) {
-        case NUM:
-            MCInsert(new MCEntry(getLoadReg(targetReg),v->num)); break;
-        case ELEM:
-            MCInsert(new MCEntry(getLoadReg(targetReg),v->varName)); break;
-        case TELEM:
-            MCInsert(new MCEntry(mLDA,v->index));
-            MCInsert(new MCEntry(mLOADT,v->varName));
-            if (targetReg!=A) {
-                MCInsert(new MCEntry(mSWAP,targetReg));
-            }
-            break;
-        case TELEMID:
-            MCInsert(new MCEntry(mLDA,v->indexName));
-            MCInsert(new MCEntry(mLOADT,v->varName));
-            if (targetReg!=A) {
-                MCInsert(new MCEntry(mSWAP,targetReg));
-            } 
-            break;
-    }
+    MCInsert(new MCEntry(getLoadReg(targetReg),v));
 }
 
 void genSaveValue (valinfo* v) {
     switch (v->type) {
         case NUM:
             yyerrorline("Nie można zapisać stałej!",0); break;
-        case ELEM:
-            MCInsert(new MCEntry(mSAVE,v->varName)); break; 
-        case TELEM:
-            MCInsert(new MCEntry(mLDB,v->index));
-            MCInsert(new MCEntry(mSAVET,v->varName));
-            break;
-        case TELEMID:
-            MCInsert(new MCEntry(mLDB,v->indexName));
-            MCInsert(new MCEntry(mSAVET,v->varName));
-            break;
+        default:
+            MCInsert(new MCEntry(mSAVE,v)); break; 
     }
 }
 
@@ -167,10 +136,160 @@ void genCondition(condinfo* c, long long id, enum MCTagTypes conttag, enum MCTag
     t = {conttag,id}; queueTag(t);
 }
 
+long long pwrOfTwo(long long n) {
+    if (n==0) return -1;
+    long long p = 0;
+    
+    while (n!=1) {
+        if (n%2!=0) return -1;
+        p++;
+        n = n/2;
+    }
+    return p;
+}
+
 void genTimes(exprinfo* e) {
+    valinfo* v1 = e->v1;
+    valinfo* v2 = e->v2;
+    bool negFlag = false;
+
+    if ((v1->type == NUM && v1->num == 0) || (v2->type == NUM && v2->num == 0)) {
+        MCInsert(new MCEntry(mRESET,A));
+        return;
+    }
+
+    if (v2->type == NUM) {
+        long long n = v2->num;
+        if (n<0)  {
+            negFlag = true;
+            n=-n;
+        }
+        long long p=pwrOfTwo(n);
+        if (p!=-1) {
+            MCInsert(new MCEntry(mLDB,makeValinfoNum(p,0)));
+            genValue(v1,A);
+            MCInsert(new MCEntry(mSHIFT,B));
+
+            if (negFlag) {
+                MCInsert(new MCEntry(mSWAP,B));
+                MCInsert(new MCEntry(mRESET,A));
+                MCInsert(new MCEntry(mSUB,B));
+            }
+            return;
+        }
+    }
+
+    negFlag = false;
+    if (v1->type == NUM) {
+        long long n = v1->num;
+        if (n<0)  {
+            negFlag = true;
+            n=-n;
+        }
+        long long p=pwrOfTwo(n);
+        if (p!=-1) {
+            MCInsert(new MCEntry(mLDB,makeValinfoNum(p,0)));
+            genValue(v2,A);
+            MCInsert(new MCEntry(mSHIFT,B));
+
+            if (negFlag) {
+                MCInsert(new MCEntry(mSWAP,B));
+                MCInsert(new MCEntry(mRESET,A));
+                MCInsert(new MCEntry(mSUB,B));
+            }
+            return;
+        }
+    }
+
+    negFlag = false;
+    if (v1->type == NUM || v2->type == NUM) {
+        long long n = 0;
+        bool usev1 = false;
+        if (v1->type == NUM) {
+            if (v1->num < 0) {
+                n = -(v1->num);
+                negFlag = true;
+            }
+            else {
+                n = v1->num;
+            }
+            usev1 = true;
+        }
+
+        if (v2->type == NUM) {
+            long long n2;
+            if (v2->num < 0) {
+                n2 = -(v2->num);
+                if (n2<n) {
+                    n = n2;
+                    usev1 = false;
+                    negFlag = true;
+                }
+            }
+            else {
+                n2 = v2->num;
+                if (n2<n) {
+                    n = n2;
+                    usev1 = false;
+                    negFlag = true;
+                }
+            }
+        }
+        //A - wynik, B - min(v1,v2), C - 1, D - max(v1,v2)
+        if (n<=15) {
+            //zajmij rejestry
+            mcRegistry[C] = false;
+            mcRegistry[D] = false;
+            //c=1
+            MCInsert(new MCEntry(mRESET,C));
+            MCInsert(new MCEntry(mINC,C));
+
+            //
+            if(usev1) {
+                MCInsert(new MCEntry(mLDB,v1));
+                MCInsert(new MCEntry(mLDD,v2));
+            }
+            else {
+                MCInsert(new MCEntry(mLDB,v2));
+                MCInsert(new MCEntry(mLDD,v1));
+            }
+            MCInsert(new MCEntry(mRESET,A));
+            
+            //pętla
+            MCInsert(new MCEntry(mSWAP,B));
+            MCInsert(new MCEntry(mJZERO,makeValinfoNum(5,0)));
+            MCInsert(new MCEntry(mDEC,A));
+            MCInsert(new MCEntry(mSWAP,B));
+            MCInsert(new MCEntry(mADD,D));
+            MCInsert(new MCEntry(mJUMP,makeValinfoNum(-5,0)));
+            //odpowiedź znajduje się w B
+            if (negFlag) {
+                MCInsert(new MCEntry(mRESET,A));
+                MCInsert(new MCEntry(mSUB,B));
+            }
+            else {
+                MCInsert(new MCEntry(mSWAP,B));
+            }
+
+            //zwolnij rejestry
+            mcRegistry[C] = true;
+            mcRegistry[D] = true;
+
+            return;
+        }
+    }
+
     genValue(e->v2,B);
     genValue(e->v1,A);
+    mcRegistry[C] = false;
+    mcRegistry[D] = false;
+    mcRegistry[E] = false;
+    mcRegistry[F] = false;
     MCInsert(new MCEntry(mTIMES,B));
+    mcRegistry[C] = true;
+    mcRegistry[D] = true;
+    mcRegistry[E] = true;
+    mcRegistry[F] = true;
 }
 
 void genDiv(exprinfo* e) {
@@ -278,17 +397,59 @@ void genCommand(cominfo* c) {
             t = {t_END,c->ID}; queueTag(t);
             break;
         case c_FORTO:
-            break;
+            MCInsert(new MCEntry(mLDA,c->ifvar->from));
+            MCInsert(new MCEntry(mJUMP,makeValinfoNum(2,c->line)));
+            t = {t_START,c->ID}; queueTag(t);
+            MCInsert(new MCEntry(mLDA,c->vi));
+            MCInsert(new MCEntry(mSWAP,B));
+            MCInsert(new MCEntry(mLDA,c->ifvar->to));
+            MCInsert(new MCEntry(mSUB,B));
+            MCInsert(new MCEntry(mJNEG,t_END,c->ID));
+            MCInsert(new MCEntry(mSWAP,B));
+            MCInsert(new MCEntry(mINC,A));
+            genSaveValue(c->vi);
+            
+            ch = *(c->children);
+            while (ch!=0) {
+                genCommand(ch);
+                ch = ch->next;
+            }
+
+            MCInsert(new MCEntry(mJUMP,t_START,c->ID));
+            t = {t_END,c->ID}; queueTag(t);
+
+        break;
         case c_FORDOWNTO:
-            break;
+            MCInsert(new MCEntry(mLDA,c->ifvar->from));
+            MCInsert(new MCEntry(mJUMP,makeValinfoNum(2,c->line)));
+            t = {t_START,c->ID}; queueTag(t);
+            MCInsert(new MCEntry(mLDA,c->vi));
+            MCInsert(new MCEntry(mSWAP,B));
+            MCInsert(new MCEntry(mLDA,c->ifvar->to));
+            MCInsert(new MCEntry(mSUB,B));
+            MCInsert(new MCEntry(mJPOS,t_END,c->ID));
+            MCInsert(new MCEntry(mSWAP,B));
+            MCInsert(new MCEntry(mDEC,A));
+            genSaveValue(c->vi);
+            
+            ch = *(c->children);
+            while (ch!=0) {
+                genCommand(ch);
+                ch = ch->next;
+            }
+
+            MCInsert(new MCEntry(mJUMP,t_START,c->ID));
+            t = {t_END,c->ID}; queueTag(t);
+
+        break;
         case c_ASSIGN:
             genExpression(c->ei);
             genSaveValue(c->vi);
-            break;
+        break;
         case c_READ:
             MCInsert(new MCEntry(mREAD,A));
             genSaveValue(c->vi);
-            break;
+        break;
         case c_WRITE:
             genValue(c->vi,A);
             MCInsert(new MCEntry(mWRITE,A));
@@ -298,31 +459,37 @@ void genCommand(cominfo* c) {
 
 void printMCEntry(MCEntry* mc) {
     for (auto v: mc->tags) {
-        cout<<"[";
+        cout<<"<";
         switch (v.type){
             case t_START: cout<<"s-"; break;
             case t_CODE1: cout<<"c-"; break;
             case t_CODE2: cout<<"z-"; break;
             case t_END: cout<<"e-"; break;
         }
-        cout<<v.ID<<"] ";
+        cout<<v.ID<<"> ";
     }
 
     cout<<MCinstrName[mc->ins]<<" ";
     
     switch (mc->var->type) {
-        case t_VAR: cout<<mc->var->name; break;
+        case t_VAL: 
+            switch(mc->var->val->type) {
+                case NUM: cout<<mc->var->val->num; break;
+                case ELEM: cout<<mc->var->val->varName; break;
+                case TELEM: cout<< mc->var->val->varName<<"["<<mc->var->val->index<<"]"; break;
+                case TELEMID: cout<< mc->var->val->varName<<"["<<mc->var->val->indexName<<"]"; break;
+            }
+        break;
         case t_TAG: 
-            cout<<"[";
+            cout<<"<";
             switch (mc->var->tag.type){
                 case t_START: cout<<"s-"; break;
                 case t_CODE1: cout<<"c-"; break;
                 case t_CODE2: cout<<"z-"; break;
                 case t_END: cout<<"e-"; break;
             }
-            cout<<mc->var->tag.ID<<"]";
+            cout<<mc->var->tag.ID<<">";
         break;
-        case t_CONST: cout<<mc->var->num; break;
         case t_REG: cout<<":"<<regName[mc->var->reg]<<":"; break;
     }
     cout<<endl;
