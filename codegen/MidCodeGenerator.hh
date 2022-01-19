@@ -1,7 +1,6 @@
 #include <stack>
 #include <algorithm>
-#include "mcInstructions.hh"
-#include "genTimesModDiv.hh"
+#include "MidCodeInstructions.hh"
 
 enum MCTagTypes {t_START,t_END,t_CODE1,t_CODE2};
 struct MCTag {
