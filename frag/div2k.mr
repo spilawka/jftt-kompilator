@@ -1,0 +1,132 @@
+GET
+SWAP e
+GET
+SWAP f
+RESET g (FLAGA OPERACJI, [-1]-e/f [0]e/f [1]e/-f [2]-e/-f)
+(:c1 - sprawdź dzielną) RESET a
+ADD e
+JZERO 29 (:j2)
+JPOS 5 (:c2)
+DEC g
+RESET a
+SUB e
+SWAP e
+(:c2 - sprawdź dzielnik) RESET a
+ADD f
+JZERO 21 (:j2)
+JPOS 10 (:c3)
+RESET a
+SUB f
+SWAP f
+SWAP g
+JZERO 3
+INC a
+INC a
+INC a
+SWAP g
+(:c3 - f==1)RESET a
+ADD f
+DEC a
+JZERO 10 (:j3)
+(:c4 - e<f || e==f) RESET a
+ADD e
+SUB f
+JNEG 9 (:j4)
+JZERO 13(:j5)
+JUMP 16 (:mult)
+(:j2 - e|f == 0) RESET a
+RESET b
+JUMP 89 (:skip)
+(:j3 f==1) SWAP e 
+RESET b
+JUMP 53 (:end+2)
+(:j4 f<g) RESET a
+ADD e
+SWAP b
+RESET a
+JUMP 48 (:end+2)
+(:j5 f==g) RESET a
+INC a
+RESET b
+JUMP 44 (:end+2)
+(:mult) RESET c
+INC c
+RESET d
+RESET a (Wyznacz taką liczbę k, że k>=f oraz k postaci f_0*2^i)
+ADD f
+SUB e
+JPOS 6
+SWAP f
+SHIFT c
+SWAP f
+INC d
+JUMP -8
+(preprocessing) RESET c
+DEC c
+SWAP f
+SHIFT c
+SWAP f
+DEC d
+RESET b (b=0)
+(:loop) SWAP d
+JNEG 21 (:end)
+SWAP d
+RESET a
+ADD e
+SUB f
+JNEG 8 (:p) (e<f - nic nie rób, kontynuuj pętlę)
+SWAP e (zapisz nowe e)
+RESET a
+INC a
+SHIFT d
+SWAP b      (b=b+2^d)
+ADD b
+SWAP b
+(:p) DEC d
+SWAP d
+JNEG 6 (:end)
+SWAP d
+SWAP f
+SHIFT c
+SWAP f
+JUMP -21 (:loop)
+(:end) SWAP e
+SWAP b (A - wynik B - reszta)
+(:end+2 - rozpatrz flagę) SWAP g (G = res)
+JZERO 32 (:skip-1)
+JNEG 18 (:negpos)
+DEC a
+JZERO 6 (:posneg)
+(:negneg) RESET a
+SUB b (A = -mod)
+SWAP b
+SWAP g
+JUMP 25 (:skip)
+(:posneg) SWAP b (A = mod)
+JZERO 5
+SUB f
+SWAP b (b=b-f ok)
+INC g
+JUMP 2
+SWAP b
+RESET a
+SUB g
+JUMP 15 (:skip)
+(:negpos) SWAP b (A = mod)
+JZERO 8
+SUB f
+SWAP b 
+RESET a
+SUB b
+SWAP b (b=f-b ok)
+INC g
+JUMP 2
+SWAP b
+RESET a
+SUB g
+JUMP 2 (:skip)
+SWAP g
+(:skip) PUT
+SWAP b
+PUT
+HALT

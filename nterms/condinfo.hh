@@ -20,7 +20,7 @@ condinfo* createCondInfo(valinfo* v1, enum condInfoTypes type, valinfo* v2) {
     return c;
 }
 
-void invertCondInfo(condinfo* c) {
+condinfo* invertCondInfo(condinfo* c) {
     struct valinfo* temp = c->v1;
     c->v1 = c->v2;
     c->v2 = temp;
@@ -32,5 +32,6 @@ void invertCondInfo(condinfo* c) {
         case c_GEQ: c->type=c_LEQ; break;
         default: break;
     }
+    return c;
 }
 

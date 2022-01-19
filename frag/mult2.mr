@@ -1,0 +1,72 @@
+GET (e)
+SWAP e
+GET (f)
+SWAP f
+RESET g (FLAGA, 0 - wynik nieujemny, 1/-1 - wynik ujemny)
+(:c1 - e<0?) SWAP e
+JPOS 8 (:c2 -1)
+JZERO 23 (:z)
+INC g
+SWAP e
+RESET a
+SUB e
+SWAP e
+JUMP 2 (:c2)
+SWAP e
+(:c2 - f<0?) SWAP f
+JPOS 8 (:c3 - 1)
+JZERO 13 (:z)
+DEC g
+SWAP f
+RESET a
+SUB f
+SWAP f
+JUMP 2 (:c3)
+SWAP f
+(:c3 zamień gdy f>e) RESET a
+ADD e
+SUB f
+JNEG 4 (:swap)
+JUMP 7 (:init)
+(:z) RESET a
+JUMP 39(:end)
+(:swap) RESET a
+ADD f
+SWAP e
+SWAP f
+(:init) RESET b
+RESET c
+DEC c           (c=-1)
+RESET d
+INC d           (d=1)
+(:loop) SWAP f
+DEC a
+JZERO 19 (:end)
+INC a
+SWAP f
+(sprawdź czy f%2==0) RESET a
+ADD f
+SHIFT c
+SHIFT d 
+SUB f
+JZERO 4
+(:nmod f%2!=0) SWAP b
+ADD e
+SWAP b
+(:mod f%2==0) SWAP e
+SHIFT d
+SWAP e
+SWAP f
+SHIFT c
+SWAP f
+JUMP -20
+(:end) SWAP b
+ADD e
+SWAP g
+JZERO 4 (:print)
+RESET a
+SUB g
+JUMP 2
+SWAP g
+PUT
+HALT

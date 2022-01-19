@@ -23,6 +23,10 @@
   #include "nterms/cominfo.hh"
   #include "codegen/codeGen.hh"
   #include "codegen/checkVal.hh"
+  #include "codegen/codeVarGen.hh"
+  #include "codegen/midToMR.hh"
+
+  cominfo* root;
 %}
 
 %locations
@@ -56,26 +60,12 @@
 %%
 program:
   VAR declarations BEG commands END {
-    printSymbols();
-    cominfo* root = genComInfo(c_ROOT,0,0);
+    root = genComInfo(c_ROOT,0,0);
     insertChildren(root,$4);
-    printChildren(root,0);
-    cfID = 0;
-    checkVariables(root);
-
-    cominfo* ch = *(root->children);
-      while (ch!=0) {
-        genCommand(ch);
-        ch = ch->next;
-    }
-    MCInsert(new MCEntry(mHALT,A));
-
-    for (auto v: midCode) {
-      printMCEntry(v);
-    }
   }
 | BEG commands END {
-    printSymbols();
+    root = genComInfo(c_ROOT,0,0);
+    insertChildren(root,$2);
   }
 ;
 
@@ -132,13 +122,25 @@ command:
     insertChildren($$,$2);
   }
 | FOR pidentifier FROM value TO value DO commands ENDFOR {
-    if (hasSymbol($2)) { yyerrorline("Istnieje symbol o nazwie "+string($2),yylineno); }
+    if (hasSymbol($2)) {
+      varData* v = getSymbol($2);
+      if (v->range == GLOBAL)
+        yyerrorline("Istnieje symbol o nazwie "+string($2),yylineno); }
+    else {
+      putSymbol($2,LOCAL);
+    }
     $$ = genComInfo(c_FORTO,++cfID,yylineno);
     insertComInfoData($$,makeComvar($2,$4,$6),0,0,makeValinfoElem($2,yylineno));
     insertChildren($$,$8);
   }
 | FOR pidentifier FROM value DOWNTO value DO commands ENDFOR {
-    if (hasSymbol($2)) { yyerrorline("Istnieje symbol o nazwie "+string($2),yylineno); }
+    if (hasSymbol($2)) {
+      varData* v = getSymbol($2);
+      if (v->range == GLOBAL)
+        yyerrorline("Istnieje symbol o nazwie "+string($2),yylineno); }
+    else {
+      putSymbol($2,LOCAL);
+    }
     $$ = genComInfo(c_FORDOWNTO,++cfID,yylineno);
     insertComInfoData($$,makeComvar($2,$4,$6),0,0,makeValinfoElem($2,yylineno));
     insertChildren($$,$8);
@@ -230,4 +232,23 @@ void yyerror(string s) {
 
 int main() {
   yyparse();
+  printSymbols();
+  printChildren(root,0);
+  cfID = 0;
+  checkVariables(root);
+
+  cominfo* ch = *(root->children);
+    while (ch!=0) {
+      genCommand(ch,0);
+      ch = ch->next;
+  }
+  MCI(new MCE(mHALT,A));
+
+  for (auto v: midCode) {
+    printMCE(v);
+  }
+
+  printregsUsed(regsUsed(midCode));
+  injectFilesCode("frag/div2clean.mr");
+  printOutputLines();
 }

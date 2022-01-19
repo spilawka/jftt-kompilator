@@ -1,6 +1,7 @@
 #include <stack>
 #include <algorithm>
 #include "mcInstructions.hh"
+#include "genTimesModDiv.hh"
 
 enum MCTagTypes {t_START,t_END,t_CODE1,t_CODE2};
 struct MCTag {
@@ -18,41 +19,48 @@ struct MCVar {
 };
 typedef struct MCVar MCVar;
 
-class MCEntry {
+long long globalPriority = 0;
+long long globalcfID = cfID;
+
+class MCE {
 public:
     vector<MCTag> tags;
     enum MCinstr ins;
     MCVar* var;
     bool registry[8];
     valinfo* registryVals[2];
+    long long priority;
+    long long cfID;
 
-    MCEntry() {
+    MCE() {
         this->tags = {};
         this->var = new MCVar();
+        this->priority = globalPriority;
+        this->cfID = globalcfID;
     }
 
     /** Konstruktor dla stałej liczby*/
     /** Konstruktor dla zmiennej*/
-    MCEntry(enum MCinstr i, valinfo* v): MCEntry(){
+    MCE(enum MCinstr i, valinfo* v): MCE(){
         this->ins = i;
         this->var->type = t_VAL;
         this->var->val = v;
     }
     /** Konstruktor dla rejestru*/
-    MCEntry(enum MCinstr i, enum reg reg): MCEntry(){
+    MCE(enum MCinstr i, enum reg reg): MCE(){
         this->ins = i;
         this->var->type = t_REG;
         this->var->reg = reg;
     }
     /** Konstruktor dla tagu (odniesienia)*/
-    MCEntry(enum MCinstr i, enum MCTagTypes tt, long long ID): MCEntry(){
+    MCE(enum MCinstr i, enum MCTagTypes tt, long long ID): MCE(){
         this->ins = i;
         this->var->type = t_TAG;
         this->var->tag.type = tt;
         this->var->tag.ID = ID;
     }
 
-    ~MCEntry() {
+    ~MCE() {
         this->tags.clear();
         delete(var);
     }
@@ -72,9 +80,9 @@ public:
         return tags.size() != 0;
     }
 };
-typedef class MCEntry MCEntry;
+typedef class MCE MCE;
 
-vector<MCEntry*> midCode;
+vector<MCE*> midCode;
 /** Określenie czy dane rejestry są dostępne */
 bool mcRegistry[8] = {false,false,true,true,true,true,true,true};
 /** konkretne wartości przechowywane w rejestrach A i B */
@@ -88,15 +96,14 @@ void queueTag(MCTag tag) {
     queuedTag = tag;
 }
 
-void modifyMCReg(MCEntry* e) {
+void modifyMCReg(MCE* e) {
     valinfo* t;
     switch (e->ins) {
-        case mREAD: case mSAVE: case mLDA:
+        case mREAD: case mLD:
             mcRegistryVals[A] = e->var->val;
         break;
-        case mLDB:
+        case mSAVE:
             mcRegistryVals[A] = 0;
-            mcRegistryVals[B] = e->var->val;
         break;
         case mSWAP:
             if (e->var->type == t_REG) {
@@ -125,7 +132,7 @@ void modifyMCReg(MCEntry* e) {
     }
 }
 
-void MCInsert(MCEntry* newEntry) {
+void MCI(MCE* newEntry) {
     if (isTagQueued) {
         newEntry->addTag(queuedTag);
         isTagQueued = false;
@@ -149,14 +156,16 @@ void genValue (valinfo* v, enum reg targetReg) {
 
     switch (v->type) {
         case NUM: case ELEM:
-            MCInsert(new MCEntry(getLoadReg(targetReg),v)); break;
+            mcRegistry[C] = false;
+            MCI(new MCE(mLD,v));
+            if (targetReg != A)  MCI(new MCE(mSWAP,targetReg));
+            mcRegistry[C] = true; break;
         default:
             mcRegistry[C] = false;
-            MCInsert(new MCEntry(getLoadReg(targetReg),v));
+            MCI(new MCE(mLD,v));
+            if (targetReg != A) MCI(new MCE(mSWAP,targetReg));
             mcRegistry[C] = true; break;
     }
-    
-    
 }
 
 void genSaveValue (valinfo* v) {
@@ -164,43 +173,70 @@ void genSaveValue (valinfo* v) {
         case NUM:
             yyerrorline("Nie można zapisać stałej!",0); break;
         case ELEM:
-            MCInsert(new MCEntry(mSAVE,v)); break; 
+            MCI(new MCE(mSAVE,v)); break; 
         default:
             mcRegistry[C] = false;
-            MCInsert(new MCEntry(mSAVE,v)); 
+            MCI(new MCE(mSAVE,v)); 
             mcRegistry[C] = true; break;
     }
 }
 
-void genCondition(condinfo* c, long long id, enum MCTagTypes conttag, enum MCTagTypes exittag) {
-    genValue(c->v2,B);
-    genValue(c->v1,A);
+void genMinus(exprinfo* e) {
+    long long val;
+    //zero
+    if (isTheSameVal(e->v1,e->v2)) {
+        MCI(new MCE(mRESET,A));
+    }
+    else if (e->v2->type == NUM) {
+        val = e->v2->num;
+        if (val == 0) {
+            genValue(e->v1,A);
+        }
+        else if (val<=10 && val>0) {
+            genValue(e->v1,A);
+            for (int i=0; i<val; i++) {
+                MCI(new MCE(mDEC,A));
+            }
+        }
+        else if (val>=-10 && val<0) {
+            genValue(e->v1,A);
+            for (int i=0; i<val; i++) {
+                MCI(new MCE(mINC,A));
+            }
+        }
+    }
+    else {
+        genValue(e->v2,B);
+        genValue(e->v1,A);
+        MCI(new MCE(mSUB,B));
+    }
+}
 
-    //wartość A staje się bez znaczenia
-    MCInsert(new MCEntry(mSUB,B));
+void genCondition(condinfo* c, long long id, enum MCTagTypes conttag, enum MCTagTypes exittag) {
+    genMinus(createExprInfo(c->v1,e_MINUS,c->v2));
 
     MCTag t;
     switch(c->type) {
         case c_EQ:
-            MCInsert(new MCEntry(mJZERO,conttag,id));
-            MCInsert(new MCEntry(mJUMP,exittag,id));
+            MCI(new MCE(mJZERO,conttag,id));
+            MCI(new MCE(mJUMP,exittag,id));
         break;
         case c_NEQ:
-            MCInsert(new MCEntry(mJZERO,exittag,id));
+            MCI(new MCE(mJZERO,exittag,id));
         break;
         case c_LE:
-            MCInsert(new MCEntry(mJNEG,conttag,id));
-            MCInsert(new MCEntry(mJUMP,exittag,id));
+            MCI(new MCE(mJNEG,conttag,id));
+            MCI(new MCE(mJUMP,exittag,id));
         break;
         case c_LEQ:
-            MCInsert(new MCEntry(mJPOS,exittag,id));
+            MCI(new MCE(mJPOS,exittag,id));
         break;
         case c_GE:
-            MCInsert(new MCEntry(mJPOS,conttag,id));
-            MCInsert(new MCEntry(mJUMP,exittag,id));
+            MCI(new MCE(mJPOS,conttag,id));
+            MCI(new MCE(mJUMP,exittag,id));
         break;
         case c_GEQ:
-            MCInsert(new MCEntry(mJNEG,exittag,id));
+            MCI(new MCE(mJNEG,exittag,id));
         break;
     }
 
@@ -225,7 +261,7 @@ void genTimes(exprinfo* e) {
     bool negFlag = false;
 
     if ((v1->type == NUM && v1->num == 0) || (v2->type == NUM && v2->num == 0)) {
-        MCInsert(new MCEntry(mRESET,A));
+        MCI(new MCE(mRESET,A));
         return;
     }
 
@@ -236,17 +272,27 @@ void genTimes(exprinfo* e) {
             n=-n;
         }
         long long p=pwrOfTwo(n);
-        if (p!=-1) {
+        if (p==0) {
+            if (negFlag) {
+                genValue(v1,B);
+                MCI(new MCE(mSUB,B));
+            }
+            else {
+                genValue(v1,A);
+            }
+            return;
+        }
+        else if (p!=-1) {
             valinfo* v = makeValinfoNum(p,0);
             genValue(v,B);
             genValue(v1,A);
 
-            MCInsert(new MCEntry(mSHIFT,B));
+            MCI(new MCE(mSHIFT,B));
 
             if (negFlag) {
-                MCInsert(new MCEntry(mSWAP,B));
-                MCInsert(new MCEntry(mRESET,A));
-                MCInsert(new MCEntry(mSUB,B));
+                MCI(new MCE(mSWAP,B));
+                MCI(new MCE(mRESET,A));
+                MCI(new MCE(mSUB,B));
             }
             return;
         }
@@ -256,7 +302,7 @@ void genTimes(exprinfo* e) {
     if (v1->type == NUM) {
         long long n = v1->num;
         if (n<0)  {
-            negFlag = true;
+            negFlag = !negFlag;
             n=-n;
         }
         long long p=pwrOfTwo(n);
@@ -264,12 +310,12 @@ void genTimes(exprinfo* e) {
             genValue(makeValinfoNum(p,0),B);
             genValue(v2,A);
 
-            MCInsert(new MCEntry(mSHIFT,B));
+            MCI(new MCE(mSHIFT,B));
 
             if (negFlag) {
-                MCInsert(new MCEntry(mSWAP,B));
-                MCInsert(new MCEntry(mRESET,A));
-                MCInsert(new MCEntry(mSUB,B));
+                MCI(new MCE(mSWAP,B));
+                MCI(new MCE(mRESET,A));
+                MCI(new MCE(mSUB,B));
             }
             return;
         }
@@ -282,7 +328,7 @@ void genTimes(exprinfo* e) {
         if (v1->type == NUM) {
             if (v1->num < 0) {
                 n = -(v1->num);
-                negFlag = true;
+                negFlag = !negFlag;
             }
             else {
                 n = v1->num;
@@ -297,7 +343,7 @@ void genTimes(exprinfo* e) {
                 if (n2<n) {
                     n = n2;
                     usev1 = false;
-                    negFlag = true;
+                    negFlag = !negFlag;
                 }
             }
             else {
@@ -305,44 +351,41 @@ void genTimes(exprinfo* e) {
                 if (n2<n) {
                     n = n2;
                     usev1 = false;
-                    negFlag = true;
                 }
             }
         }
         //A - wynik, B - min(v1,v2), C - 1, D - max(v1,v2)
         if (n<=15) {
+            //
+            if(usev1) {
+                genValue(v1,B);
+                genValue(v2,D);
+            }
+            else {
+                genValue(v2,B);
+                genValue(v1,D);
+            }
             //zajmij rejestry
             mcRegistry[C] = false;
             mcRegistry[D] = false;
             //c=1
-            MCInsert(new MCEntry(mRESET,C));
-            MCInsert(new MCEntry(mINC,C));
-
-            //
-            if(usev1) {
-                MCInsert(new MCEntry(mLDB,v1));
-                MCInsert(new MCEntry(mLDD,v2));
-            }
-            else {
-                MCInsert(new MCEntry(mLDB,v2));
-                MCInsert(new MCEntry(mLDD,v1));
-            }
-            MCInsert(new MCEntry(mRESET,A));
-            
+            MCI(new MCE(mRESET,C));
+            MCI(new MCE(mINC,C));
+            MCI(new MCE(mRESET,A));
             //pętla
-            MCInsert(new MCEntry(mSWAP,B));
-            MCInsert(new MCEntry(mJZERO,makeValinfoNum(5,0)));
-            MCInsert(new MCEntry(mDEC,A));
-            MCInsert(new MCEntry(mSWAP,B));
-            MCInsert(new MCEntry(mADD,D));
-            MCInsert(new MCEntry(mJUMP,makeValinfoNum(-5,0)));
+            MCI(new MCE(mSWAP,B));
+            MCI(new MCE(mJZERO,makeValinfoNum(5,0)));
+            MCI(new MCE(mDEC,A));
+            MCI(new MCE(mSWAP,B));
+            MCI(new MCE(mADD,D));
+            MCI(new MCE(mJUMP,makeValinfoNum(-5,0)));
             //odpowiedź znajduje się w B
             if (negFlag) {
-                MCInsert(new MCEntry(mRESET,A));
-                MCInsert(new MCEntry(mSUB,B));
+                MCI(new MCE(mRESET,A));
+                MCI(new MCE(mSUB,B));
             }
             else {
-                MCInsert(new MCEntry(mSWAP,B));
+                MCI(new MCE(mSWAP,B));
             }
 
             //zwolnij rejestry
@@ -353,50 +396,135 @@ void genTimes(exprinfo* e) {
         }
     }
 
+    genValue(e->v2,F);
+    genValue(e->v1,E);
+    mcRegistry[C] = false;
+    mcRegistry[D] = false;
+    mcRegistry[E] = false;
+    mcRegistry[F] = false;
+    mcRegistry[G] = false;
+    MCI(new MCE(mTIMES,B));
+    mcRegistry[C] = true;
+    mcRegistry[D] = true;
+    mcRegistry[E] = true;
+    mcRegistry[F] = true;
+    mcRegistry[G] = true;
+}
+
+void genDiv(exprinfo* e) {
+    valinfo* v1 = e->v1;
+    valinfo* v2 = e->v2;
+
+    if ((v1->type == NUM && v1->num == 0) || (v2->type == NUM && v2->num == 0)) {
+        MCI(new MCE(mRESET,A));
+        return;
+    }
+
+    if (v2->type == NUM && v2->num>0) {
+        long long n = v2->num;
+        long long p = pwrOfTwo(n);
+        if (p!=-1) {
+            genValue(makeValinfoNum(p,0),B);
+            genValue(v1,A);
+            MCI(new MCE(mSHIFT,B));
+        }
+        return;
+    }
+    genValue(e->v2,F);
+    genValue(e->v1,E);
+    mcRegistry[C] = false;
+    mcRegistry[D] = false;
+    mcRegistry[E] = false;
+    mcRegistry[F] = false;
+    mcRegistry[G] = false;
+    MCI(new MCE(mDIV,B));
+    mcRegistry[C] = true;
+    mcRegistry[D] = true;
+    mcRegistry[E] = true;
+    mcRegistry[F] = true;
+    mcRegistry[G] = true;
+}
+
+void genMod(exprinfo* e) {
+    valinfo* v1 = e->v1;
+    valinfo* v2 = e->v2;
+
+    if ((v1->type == NUM && v1->num == 0) || (v2->type == NUM && v2->num == 0)) {
+        MCI(new MCE(mRESET,A));
+        return;
+    }
+
+    if (v2->type == NUM && (v2->num == 1 || v2->num == -1)) {
+        MCI(new MCE(mRESET,A));
+        return;
+    }
+
+    if (v2->type == NUM && v2->num > 0) {
+        long long p = pwrOfTwo(v2->num);
+        if (p!=-1) {
+            
+            genValue(makeValinfoNum(p,0),B);
+            genValue(v1,A);
+            mcRegistry[C] = false;
+            MCI(new MCE(mRESET,C));
+            MCI(new MCE(mSWAP,C));
+            MCI(new MCE(mRESET,A));
+            MCI(new MCE(mADD,C));
+
+            mcRegistry[C] = true;
+        }
+    }
+
+    
     genValue(e->v2,B);
     genValue(e->v1,A);
     mcRegistry[C] = false;
     mcRegistry[D] = false;
     mcRegistry[E] = false;
     mcRegistry[F] = false;
-    MCInsert(new MCEntry(mTIMES,B));
+    mcRegistry[G] = false;
+    MCI(new MCE(mDIV,B));
+    MCI(new MCE(mSWAP,B));
     mcRegistry[C] = true;
     mcRegistry[D] = true;
     mcRegistry[E] = true;
     mcRegistry[F] = true;
-}
-
-void genDiv(exprinfo* e) {
-    genValue(e->v2,B);
-    genValue(e->v1,A);
-    MCInsert(new MCEntry(mDIV,B));
-}
-
-void genMod(exprinfo* e) {
-    genValue(e->v2,B);
-    genValue(e->v1,A);
-    MCInsert(new MCEntry(mMOD,B));
+    mcRegistry[G] = true;
 }
 
 void genExpression(exprinfo* e) {
+    long long val;
     switch (e->type) {
         case e_SOLO: genValue(e->v1,A); break;
         case e_PLUS:
-            genValue(e->v2,B);
-            genValue(e->v1,A);
-            MCInsert(new MCEntry(mADD,B));
-            break;
-        case e_MINUS:
-            //zero
-            if (isTheSameVal(e->v1,e->v2)) {
-                MCInsert(new MCEntry(mRESET,A));
+
+            if (e->v2->type == NUM) {
+                val = e->v2->num;
+                if (val == 0) {
+                    genValue(e->v1,A);
+                }
+                else if (val<=10 && val>0) {
+                    genValue(e->v1,A);
+                    for (int i=0; i<val; i++) {
+                        MCI(new MCE(mINC,A));
+                    }
+                }
+                else if (val>=-10 && val<0) {
+                    genValue(e->v1,A);
+                    for (int i=0; i<val; i++) {
+                        MCI(new MCE(mDEC,A));
+                    }
+                }
             }
             else {
                 genValue(e->v2,B);
                 genValue(e->v1,A);
-                MCInsert(new MCEntry(mSUB,B));
-                break;
+                MCI(new MCE(mADD,B));
             }
+            break;
+        case e_MINUS:
+            genMinus(e);
+            break;
         case e_TIMES:
             genTimes(e); break;
         case e_DIV:
@@ -406,138 +534,172 @@ void genExpression(exprinfo* e) {
     }
 }
 
-void genCommand(cominfo* c) {
+void genCommand(cominfo* c, long long priority) {
     MCTag t;
     cominfo* ch;
     long long s;
+    long long prevID;
+
+    globalPriority = priority;
+    prevID = globalcfID;
 
     switch (c->type) {
         case c_IF:
+            globalcfID = c->ID;
             genCondition(c->ci,c->ID,t_CODE1,t_END);
 
             // gen commands
             ch = *(c->children);
             while (ch!=0) {
-                genCommand(ch);
+                genCommand(ch,priority);
                 ch = ch->next;
             }
 
+            globalcfID  = prevID;
             t = {t_END,c->ID}; queueTag(t);
             break;
         case c_IFELSE:
+            globalcfID = c->ID;
             genCondition(c->ci,c->ID,t_CODE1,t_CODE2);
 
             // gen commands 1
             ch = *(c->children);
             s = c->sep;
             while (ch!=0 && s>0) {
-                genCommand(ch);
+                genCommand(ch,priority);
                 ch = ch->next;
                 s--;
             }
-
-            MCInsert(new MCEntry(mJUMP,t_END,c->ID));
+            
+            MCI(new MCE(mJUMP,t_END,c->ID));
             t = {t_CODE2,c->ID}; queueTag(t);
 
             // gen commands 2
             while (ch!=0) {
-                genCommand(ch);
+                genCommand(ch,priority);
                 ch = ch->next;
             }
 
+            globalcfID  = prevID;
             t = {t_END,c->ID}; queueTag(t);
             break;
         case c_WHILE:
+            globalcfID = c->ID;
+            globalPriority++;
+
             t = {t_START,c->ID}; queueTag(t);
             genCondition(c->ci,c->ID,t_CODE1,t_END);
 
             // gen
             ch = *(c->children);
             while (ch!=0) {
-                genCommand(ch);
+                genCommand(ch,priority+1);
                 ch = ch->next;
             }
 
-            MCInsert(new MCEntry(mJUMP,t_START,c->ID));
+            MCI(new MCE(mJUMP,t_START,c->ID));
+            globalcfID  = prevID;
+            globalPriority = priority;
             t = {t_END,c->ID}; queueTag(t);
             break;
         case c_REPEAT:
-            MCInsert(new MCEntry(mJUMP,t_CODE1,c->ID));
+            globalcfID = c->ID;
+            globalPriority++;
+
+            MCI(new MCE(mJUMP,t_CODE1,c->ID));
             t = {t_START,c->ID}; queueTag(t);
             genCondition(c->ci,c->ID,t_CODE1,t_END);
 
             //generate
             ch = *(c->children);
             while (ch!=0) {
-                genCommand(ch);
+                genCommand(ch,priority+1);
                 ch = ch->next;
             }
-
-            MCInsert(new MCEntry(mJUMP,t_START,c->ID));
+            
+            MCI(new MCE(mJUMP,t_START,c->ID));
+            globalPriority = priority;
+            globalcfID  = prevID;
             t = {t_END,c->ID}; queueTag(t);
             break;
         case c_FORTO:
             genValue(c->ifvar->from,A);
-            MCInsert(new MCEntry(mJUMP,makeValinfoNum(2,c->line)));
+
+            globalcfID = c->ID;
+            globalPriority++;
+            MCI(new MCE(mJUMP,t_CODE1,c->ID));
+
             t = {t_START,c->ID}; queueTag(t);
             genValue(c->vi,A);
-            MCInsert(new MCEntry(mSWAP,B));
+            t = {t_CODE1, c->ID}; queueTag(t);
+            MCI(new MCE(mSWAP,B));
             genValue(c->ifvar->to,A);
-            MCInsert(new MCEntry(mSUB,B));
-            MCInsert(new MCEntry(mJNEG,t_END,c->ID));
-            MCInsert(new MCEntry(mSWAP,B));
-            MCInsert(new MCEntry(mINC,A));
+            MCI(new MCE(mSUB,B));
+            MCI(new MCE(mJNEG,t_END,c->ID));
+            MCI(new MCE(mSWAP,B));
+            MCI(new MCE(mINC,A));
             genSaveValue(c->vi);
+            
             
             ch = *(c->children);
             while (ch!=0) {
-                genCommand(ch);
+                genCommand(ch,priority+1);
                 ch = ch->next;
             }
-
-            MCInsert(new MCEntry(mJUMP,t_START,c->ID));
+            
+            MCI(new MCE(mJUMP,t_START,c->ID));
+            globalPriority = priority;
+            globalcfID  = prevID;
             t = {t_END,c->ID}; queueTag(t);
 
         break;
         case c_FORDOWNTO:
             genValue(c->ifvar->from,A);
-            MCInsert(new MCEntry(mJUMP,makeValinfoNum(2,c->line)));
+
+            globalcfID = c->ID;
+            globalPriority++;
+            MCI(new MCE(mJUMP,t_CODE1,c->ID));
+            
             t = {t_START,c->ID}; queueTag(t);
             genValue(c->vi,A);
-            MCInsert(new MCEntry(mSWAP,B));
+            t = {t_CODE1, c->ID}; queueTag(t);
+            MCI(new MCE(mSWAP,B));
             genValue(c->ifvar->to,A);
-            MCInsert(new MCEntry(mSUB,B));
-            MCInsert(new MCEntry(mJPOS,t_END,c->ID));
-            MCInsert(new MCEntry(mSWAP,B));
-            MCInsert(new MCEntry(mDEC,A));
+            MCI(new MCE(mSUB,B));
+            MCI(new MCE(mJPOS,t_END,c->ID));
+            MCI(new MCE(mSWAP,B));
+            MCI(new MCE(mDEC,A));
             genSaveValue(c->vi);
             
             ch = *(c->children);
             while (ch!=0) {
-                genCommand(ch);
+                genCommand(ch,priority+1);
                 ch = ch->next;
             }
-
-            MCInsert(new MCEntry(mJUMP,t_START,c->ID));
+            
+            MCI(new MCE(mJUMP,t_START,c->ID));
+            globalPriority = priority;
+            globalcfID  = prevID;
             t = {t_END,c->ID}; queueTag(t);
-
         break;
         case c_ASSIGN:
             genExpression(c->ei);
             genSaveValue(c->vi);
         break;
         case c_READ:
-            MCInsert(new MCEntry(mREAD,A));
+            MCI(new MCE(mREAD,A));
             genSaveValue(c->vi);
         break;
         case c_WRITE:
             genValue(c->vi,A);
-            MCInsert(new MCEntry(mWRITE,A));
+            MCI(new MCE(mWRITE,A));
         break;
     }
 }
 
-void printMCEntry(MCEntry* mc) {
+void printMCE(MCE* mc) {
+    cout<<"["<<mc->cfID<<"] ";
+
     for (auto v: mc->tags) {
         cout<<"<";
         switch (v.type){
@@ -568,97 +730,14 @@ void printMCEntry(MCEntry* mc) {
         case t_REG: cout<<":"<<regName[mc->var->reg]<<":"; break;
     }
 
-    cout<<"\t\ta:";
-    if (mc->registryVals[A]!=0) printVal(mc->registryVals[A]);
-    cout<<" b:";
-    if (mc->registryVals[B]!=0) printVal(mc->registryVals[B]);
+    cout<<"\t";
+
+    for (int i=2;i<8;i++) {
+        if (mc->registry[i]) cout<<regName[i]<<" ";
+    }
 
     cout<<endl;
 }
 
 
 
-typedef stack<pair<enum instr, enum reg>> insstack;
-/** Funkcja zwraca kod do generowania danej liczby od podstaw w kodzie maszynowym 
-    @return stos LILO z kodem instrukcji oraz modyfikowanym rejestrem
-
-    REJESTRY: A,B
-*/
-void genNumber(long long num) {
-    //stack z kodem maszynowym
-    insstack code = {};
-
-    //małe liczby (abs(n)<10)
-    if (num == 0) {
-        code.push(make_pair(RESET,A));
-    }
-    else if (num > 0 && num < 10) {
-        for (int i=0; i<num; i++)
-            code.push(make_pair(INC,A));
-        code.push(make_pair(RESET,A));
-    }
-    else if (num > -10 && num < 0) {
-        for (int i=0; i>num; i--) 
-            code.push(make_pair(DEC,A));
-        code.push(make_pair(RESET,A));
-    }
-    else {
-        //liczby ujemne - weź odwrotność i odejmij pod sam koniec
-        if (num<0) {
-            num = -num;
-            code.push(make_pair(SUB,B));
-            code.push(make_pair(RESET,A));
-            code.push(make_pair(SWAP,B));
-        }
-
-        //ilość występowania prostych wymnożeń razy dwa
-        long long conseq2 = 0;
-        while (num>0) {
-            long long modulo = num%2;
-
-            if (modulo == 0) {
-                conseq2++;
-            }
-            else {
-                if (conseq2==1) {
-                    code.push(make_pair(SHIFT,B));
-                }
-                // dla więcej operacji optymalizacja - bardziej
-                // opłaca się zwiększać b niż wykonywać SHIFTy
-                else if (conseq2>1) {
-                    code.push(make_pair(INC,B));
-                    code.push(make_pair(RESET,B));
-                    code.push(make_pair(SHIFT,B));
-                    for(int i=1;i<conseq2;i++){
-                        code.push(make_pair(INC,B));
-                    }
-                }
-                conseq2=0;
-
-                code.push(make_pair(INC,A));
-                if (num!=1)
-                    code.push(make_pair(SHIFT,B));
-            }
-
-            num = num/2;
-        }
-
-        //reset rejestrów
-        code.push(make_pair(INC,B));
-        code.push(make_pair(RESET,B));
-        code.push(make_pair(RESET,A));
-    }
-    /*
-    while (!code.empty()) {
-        pair<enum instr, enum reg> elem = code.top();
-        struct reference r;
-        r.isFinal = true;
-        r.isRegistry = true;
-        r.Registry = elem.second;
-        
-        midCode.push_back(make_pair(elem.first,r));
-
-        code.pop();
-    }
-    */
-}

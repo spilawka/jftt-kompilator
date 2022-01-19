@@ -2,17 +2,18 @@ void checkVal(cominfo* c, valinfo* v) {
     if (v->type == NUM) return;
 
     if (v->type == ELEM) {
-
         if (!hasSymbol(v->varName)) {
-            if (!checkIfParentsHaveSymbol(c,v->varName))
-                yyerrorline("Zmienna "+string(v->varName)+" niezadeklarowana!",c->line);
+            yyerrorline("Zmienna "+string(v->varName)+" niezadeklarowana! (symbol nie istnieje)",c->line);
         }
         else {
             struct varData* s = getSymbol(v->varName);
             if (s->isTable)
                 yyerrorline("Błędne użycie tablicy "+string(v->varName),c->line);
-            if (s->init == false) 
+            if (s->init == false && s->range == GLOBAL) 
                 yyerrorline("Zmienna "+string(v->varName)+" niezainicjonowana!",c->line);
+            if (s->range == LOCAL)
+                if (!checkIfParentsHaveSymbol(c,v->varName))
+                    yyerrorline("Zmienna "+string(v->varName)+" niezadeklarowana! (lokalna)",c->line);
         } 
     }
 
@@ -37,15 +38,18 @@ void checkVal(cominfo* c, valinfo* v) {
                 yyerrorline("Błędne użycie zmiennej "+string(v->varName),c->line);
 
             if (!hasSymbol(v->indexName)) {
-                if (!checkIfParentsHaveSymbol(c,v->indexName))
-                    yyerrorline("Zmienna "+string(v->indexName)+" niezadeklarowana!",c->line);
-                }
+                yyerrorline("Zmienna "+string(v->indexName)+" niezadeklarowana!",c->line);
+            }
             else {
                 struct varData* s = getSymbol(v->indexName);
                 if (s->isTable)
                     yyerrorline("Błędne użycie tablicy "+string(v->indexName),c->line);
-                if (s->init == false) 
+                if (s->init == false && s->range == GLOBAL) 
                     yyerrorline("Zmienna "+string(v->indexName)+" niezainicjonowana!",c->line);
+                if (s->range == LOCAL) {
+                    if (!checkIfParentsHaveSymbol(c,v->indexName))
+                        yyerrorline("Zmienna "+string(v->indexName)+" niezadeklarowana!",c->line);
+                }
             } 
         }
     }
