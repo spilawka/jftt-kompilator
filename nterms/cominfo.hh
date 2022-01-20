@@ -37,10 +37,10 @@ struct cominfo {
     exprinfo* ei;
     valinfo* vi;
 };
-
 typedef struct cominfo cominfo;
 
 vector<cominfo*> comInfos = {};
+map<long long,cominfo*> cfParents;
 
 cominfo* genComInfo(enum comInfoType t, long long ID, long long line) {
     cominfo* ci = new cominfo;
@@ -52,7 +52,18 @@ cominfo* genComInfo(enum comInfoType t, long long ID, long long line) {
     ci->ID = ID;
 
     comInfos.push_back(ci);
+    if (ID != 0) cfParents[ID] = ci;
     return ci;
+}
+
+cominfo* getClosestLoopParent(long long ID) {
+    cominfo* p = cfParents[ID];
+
+    while(p!=0 && !(p->type == c_WHILE || p->type == c_REPEAT || p->type == c_FORTO || p->type == c_FORDOWNTO)) {
+        p = p->parent;
+    }
+
+    return p;
 }
 
 cominfo* insertComInfoData(cominfo* com,struct comvar* ifvar, condinfo* ci, exprinfo* ei, valinfo* vi) {

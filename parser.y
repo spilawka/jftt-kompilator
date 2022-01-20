@@ -15,16 +15,16 @@
   long long condID = 1;
   extern int yylineno;
 
-  #include "vmInstructions.hh"
-  #include "sym.hh"
+  #include "VMInstructions.hh"
+  #include "SymbolTable.hh"
   #include "nterms/valinfo.hh"
   #include "nterms/exprinfo.hh"
   #include "nterms/condinfo.hh"
   #include "nterms/cominfo.hh"
-  #include "codegen/codeGen.hh"
-  #include "codegen/checkVal.hh"
-  #include "codegen/codeVarGen.hh"
-  #include "codegen/midToMR.hh"
+  #include "codegen/MidCodeGenerator.hh"
+  #include "codegen/VerifySymbols.hh"
+  #include "codegen/ControlSymbols.hh"
+  #include "codegen/MidCodeToMR.hh"
 
   cominfo* root;
 %}
@@ -232,8 +232,8 @@ void yyerror(string s) {
 
 int main() {
   yyparse();
-  printSymbols();
-  printChildren(root,0);
+  //printSymbols();
+  //printChildren(root,0);
   cfID = 0;
   checkVariables(root);
 
@@ -244,11 +244,10 @@ int main() {
   }
   MCI(new MCE(mHALT,A));
 
-  for (auto v: midCode) {
+  /*for (auto v: midCode) {
     printMCE(v);
-  }
-
-  printregsUsed(regsUsed(midCode));
-  injectFilesCode("frag/div2clean.mr");
-  printOutputLines();
+  }*/
+  generateSymbolLocationTable(midCode);
+  generateMCA(midCode);
+  generateMR(midCodeAllocated);
 }

@@ -1,21 +1,103 @@
 #include <fstream>
 #include <stdlib.h>
 
-struct EE {
-    vector <MCTag> tags;
-    enum instr inst;
+struct MRIns {
+    vector<MCTag> tags;
+    enum instr ins;
 };
 
-vector<pair<struct EE,class ECD*>> outputCode;
+enum MRRefType {r_NUM,r_REG,r_TAG,r_VOID};
+class MRReference {
+public:
+    MRRefType type;
+    long long num;
+    enum reg reg;
+    MCTag tag;
+
+    MRReference() {
+        this->type = r_VOID;
+    }
+
+    MRReference(long long n) {
+        this->type = r_NUM;
+        this->num = n;
+    }
+
+    MRReference(MCTag tag) {
+        this->type = r_TAG;
+        this->tag = tag;
+    }
+
+    MRReference(enum reg reg){
+        this->type = r_REG;
+        this->reg = reg;
+    }
+
+    void exportRef() {
+        switch(type){
+            case r_NUM: cout<<num; break;
+            case r_REG: cout<<regName[reg]; break;
+            case r_TAG: yyerror("Nie można exportować tagu!"); break;
+            case r_VOID: break;
+        }
+    }
+
+    void printRef() {
+        switch(type){
+            case r_NUM: cout<<num; break;
+            case r_REG: cout<<regName[reg];
+            break;
+            case r_TAG: printTag(tag); break;
+            case r_VOID: break;
+        }
+    }
+};
+typedef class MRReference MRReference;
+
+vector<pair<struct MRIns, MRReference>> outputCode;
 vector<MCTag> queuedTags = {};
 
-void OCinsert(pair<enum instr,class ECD*> p) {
-    struct EE newe = {{},p.first};
+void OCinsert(enum instr in, MRReference rf) {
+    struct MRIns newe = {{},in};
     if (!queuedTags.empty()) {
         newe.tags = queuedTags;
         queuedTags = {};
     }
-    outputCode.push_back(make_pair(newe,p.second));
+    outputCode.push_back(make_pair(newe,rf));
+}
+
+void printMRCode() {
+    cout<<endl;
+    for (auto p: outputCode) {
+        for (MCTag t: p.first.tags) printTag(t);
+        cout<<instrName[p.first.ins]<<" ";
+        p.second.printRef();
+        cout<<endl;
+    }
+}
+
+void linkTags() {
+    map<pair<MCTagTypes,long long>,long long> tagLoc;
+
+    long long lines = 0;
+    for (auto p: outputCode) {
+        lines++;
+        for (auto t: p.first.tags) {
+            tagLoc[make_pair(t.type,t.ID)] = lines;
+        }
+    }
+
+    lines = 0;
+    for (auto p: outputCode) {
+        lines++;
+        if (p.second.type == r_TAG) {
+            MCTag t = p.second.tag;
+            long long l = tagLoc[make_pair(t.type,t.ID)];
+            if (l==0) yyerror("MCtoMR: Brak tagu.");
+
+            outputCode.at(lines-1) = make_pair(p.first,MRReference(l-lines));
+        }
+    }
 }
 
 typedef stack<pair<enum instr, enum reg>> insstack;
@@ -90,8 +172,7 @@ void genNumber(long long num) {
     
     while (!code.empty()) {
         pair<enum instr, enum reg> elem = code.top();
-        class ECD* loc = new class ECD(elem.second);
-        OCinsert(make_pair(elem.first,loc));
+        OCinsert(elem.first,MRReference(elem.second));
 
         code.pop();
     }
@@ -112,67 +193,158 @@ void injectFilesCode(string filename) {
         line = line.substr(0,line.find(del));
         enum reg r = getReg(line);
         if (r == UNDEF) {
-            OCinsert(make_pair(getEnum(ins),new ECD(atoll(line.c_str()))));
+            OCinsert(getEnum(ins),MRReference(atoll(line.c_str())));
         }
         else {
-            OCinsert(make_pair(getEnum(ins),new ECD(r)));
+            OCinsert(getEnum(ins),MRReference(r));
         }
     }
 }
 
-void interpretIns(pair<struct ECE, class ECD*> p) {
+void interpretIns(pair<struct MCInstr, class MCDest> p) {
     queuedTags = p.first.tags;
-    enum ECDType t;
+    class MCDest d = p.second;
+    class memLoc mL;
+    class memLoc mL2;
+    long long temp;
+
     switch (p.first.instr) {
         case mREAD:
-            OCinsert(make_pair(GET,new ECD())); break;
+            OCinsert(GET, MRReference()); break;
         case mWRITE:
-            OCinsert(make_pair(PUT,new ECD())); break;
+            OCinsert(PUT, MRReference()); break;
         case mSAVE:
-            t = p.second->type;
-            if (t == ECD_reg) {
-                OCinsert(make_pair(SWAP,p.second));
+            // w A znajduje się wartość do zapisania
+            if (d.type == d_1VAR) {
+                mL = varMemLoc[d.var1];
+                switch (mL.type) {
+                    case m_REG:
+                        OCinsert(SWAP,MRReference(mL.reg)); break;
+                    case m_MEM:
+                        OCinsert(SWAP,MRReference(B));
+                        genNumber(mL.loc);
+                        OCinsert(SWAP,MRReference(B));
+                        OCinsert(STORE,MRReference(B));
+                        break;
+                    case m_CONST:
+                        yyerror("MR: Nie można zapisać zmiennej!");
+                        break;
+                }
             }
-            else if (t== ECD_num) {
-                OCinsert(make_pair(SWAP,new ECD(B)));
-                genNumber(p.second->num);
-                OCinsert(make_pair(SWAP,new ECD(B)));
-                OCinsert(make_pair(STORE,new ECD(B)));
+            else if (d.type == d_2VAR) {
+                //tablica - zawsze m_MEM
+                mL = varMemLoc[d.var1];
+                mL2 = varMemLoc[d.var2];
+
+                switch(mL2.type) {
+                    case m_CONST:
+                        //oblicz indeks
+                        OCinsert(SWAP,MRReference(B));
+                        temp = mL.loc + mL2.loc - mL.offset;
+                        genNumber(temp);
+                        OCinsert(SWAP,MRReference(B));
+                        OCinsert(STORE,MRReference(B));
+                        break;
+                    case m_REG:
+                        OCinsert(SWAP,MRReference(B));
+                        temp = mL.loc - mL.offset;
+                        genNumber(temp);
+                        //dodaj indeks
+                        OCinsert(ADD,MRReference(mL2.reg));
+                        OCinsert(SWAP,MRReference(B));
+                        OCinsert(STORE,MRReference(B));
+                        break;
+                    case m_MEM:
+                        OCinsert(SWAP,MRReference(B));
+                        genNumber(mL2.loc);
+                        OCinsert(LOAD,MRReference(A));
+                        OCinsert(SWAP,MRReference(D));
+                        temp = mL.loc - mL.offset;
+                        genNumber(temp);
+                        //dodaj indeks
+                        OCinsert(ADD,MRReference(D));
+                        OCinsert(SWAP,MRReference(B));
+                        OCinsert(STORE,MRReference(B));
+                        break;
+                }
+
+            }
+            break;
+        case mLD:
+            // pozostaw B bez zmian
+            if (d.type == d_1VAR) {
+                mL = varMemLoc[d.var1];
+                switch (mL.type) {
+                    case m_REG:
+                        OCinsert(RESET,MRReference(A));
+                        OCinsert(ADD,MRReference(mL.reg)); break;
+                    case m_MEM:
+                        genNumber(mL.loc);
+                        OCinsert(LOAD,MRReference(A));
+                        break;
+                    case m_CONST:
+                        genNumber(mL.loc);
+                        break;
+                }
+            }
+            else if (d.type == d_2VAR) {
+                //tablica - zawsze m_MEM
+                mL = varMemLoc[d.var1];
+                mL2 = varMemLoc[d.var2];
+
+                switch(mL2.type) {
+                    case m_CONST:
+                        //oblicz indeks
+                        temp = mL.loc + mL2.loc - mL.offset;
+                        genNumber(temp);
+                        OCinsert(LOAD,MRReference(A));
+                        break;
+                    case m_REG:
+                        temp = mL.loc - mL.offset;
+                        genNumber(temp);
+                        //dodaj indeks
+                        OCinsert(ADD,MRReference(mL2.reg));
+                        OCinsert(LOAD,MRReference(A));
+                        break;
+                    case m_MEM:
+                        genNumber(mL2.loc);
+                        OCinsert(LOAD,MRReference(A));
+                        OCinsert(SWAP,MRReference(D));
+                        temp = mL.loc - mL.offset;
+                        genNumber(temp);
+                        //dodaj indeks
+                        OCinsert(ADD,MRReference(D));
+                        OCinsert(LOAD,MRReference(A));
+                        break;
+                }
             }
             break;
         case mADD:
-            OCinsert(make_pair(ADD,p.second)); break;
+            OCinsert(ADD, MRReference(d.reg)); break;
         case mSUB:
-            OCinsert(make_pair(SUB,p.second)); break;
+            OCinsert(SUB, MRReference(d.reg)); break;
         case mSHIFT:
-            OCinsert(make_pair(SHIFT,p.second)); break;
+            OCinsert(SHIFT, MRReference(d.reg)); break;
         case mSWAP:
-            OCinsert(make_pair(SWAP,p.second)); break;
+            OCinsert(SWAP, MRReference(d.reg)); break;
         case mRESET:
-            OCinsert(make_pair(RESET,p.second)); break;
+            OCinsert(RESET, MRReference(d.reg)); break;
         case mINC:
-            OCinsert(make_pair(INC,p.second)); break;
+            OCinsert(INC, MRReference(d.reg)); break;
         case mDEC:
-            OCinsert(make_pair(DEC,p.second)); break;
+            OCinsert(DEC, MRReference(d.reg)); break;
         case mJUMP:
-            OCinsert(make_pair(JUMP,p.second)); break;
+            if (d.type == d_CONST) OCinsert(JUMP, MRReference(d.n)); 
+            else if (d.type == d_TAG) OCinsert(JUMP, MRReference(d.tag)); break;
         case mJPOS:
-            OCinsert(make_pair(JPOS,p.second)); break;
+            if (d.type == d_CONST) OCinsert(JPOS, MRReference(d.n)); 
+            else if (d.type == d_TAG) OCinsert(JPOS, MRReference(d.tag)); break;
         case mJZERO:
-            OCinsert(make_pair(JZERO,p.second)); break;
+            if (d.type == d_CONST) OCinsert(JZERO, MRReference(d.n)); 
+            else if (d.type == d_TAG) OCinsert(JZERO, MRReference(d.tag)); break;
         case mJNEG:
-            OCinsert(make_pair(JNEG,p.second)); break;
-        case mLD:
-            t = p.second->type;
-            if (t == ECD_reg) {
-                OCinsert(make_pair(RESET,new ECD(A)));
-                OCinsert(make_pair(ADD,p.second));
-            }
-            else if (t == ECD_num) {
-                genNumber(p.second->num);
-                OCinsert(make_pair(SWAP,new ECD(C)));
-                OCinsert(make_pair(LOAD,new ECD(C)));
-            }
+            if (d.type == d_CONST) OCinsert(JNEG, MRReference(d.n)); 
+            else if (d.type == d_TAG) OCinsert(JNEG, MRReference(d.tag)); break;
         case mTIMES:
             injectFilesCode("frag/mult2clean.mr");
             break;
@@ -181,53 +353,18 @@ void interpretIns(pair<struct ECE, class ECD*> p) {
             break;
         case mMOD:
             injectFilesCode("frag/div2clean.mr");
-            OCinsert(make_pair(SWAP,new ECD(B)));
             break;
         case mHALT:
-            OCinsert(make_pair(HALT,new ECD())); break;
+            OCinsert(HALT, MRReference());
         break;
     }
 }
 
-void printOutputLine(pair<struct EE,class ECD*> p) {
-    if (!p.first.tags.empty()) {
-        for (auto v: p.first.tags) {
-            cout<<"<";
-            switch (v.type){
-                case t_START: cout<<"s-"; break;
-                case t_CODE1: cout<<"c-"; break;
-                case t_CODE2: cout<<"z-"; break;
-                case t_END: cout<<"e-"; break;
-            }
-            cout<<v.ID<<"> ";
-        }
+void generateMR(vector<pair<MCInstr,MCDest>> MCA) {
+    for (auto p: MCA) {
+        interpretIns(p);
     }
-
-    cout<<instrName[p.first.inst]<<" ";
-
-    switch (p.second->type) {
-        case ECD_num:
-            cout<<p.second->num; break;
-        case ECD_reg:
-            cout<<regName[p.second->reg]; break;
-        case ECD_tag:
-            cout<<"<";
-            switch (p.second->tag.type){
-                case t_START: cout<<"s-"; break;
-                case t_CODE1: cout<<"c-"; break;
-                case t_CODE2: cout<<"z-"; break;
-                case t_END: cout<<"e-"; break;
-            }
-            cout<<p.second->tag.ID<<">";
-            break;
-        default:
-        break;
-    }
-    cout<<endl; 
-}
-
-void printOutputLines() {
-    for (auto l: outputCode) {
-        printOutputLine(l);
-    }
+    //printMRCode();
+    linkTags();
+    printMRCode();
 }

@@ -20,6 +20,7 @@ typedef struct MCVar MCVar;
 
 long long globalPriority = 0;
 long long globalcfID = cfID;
+enum comInfoType globalcftype;
 
 class MCE {
 public:
@@ -30,12 +31,14 @@ public:
     valinfo* registryVals[2];
     long long priority;
     long long cfID;
+    enum comInfoType cftype;
 
     MCE() {
         this->tags = {};
         this->var = new MCVar();
         this->priority = globalPriority;
         this->cfID = globalcfID;
+        this->cftype = globalcftype;
     }
 
     /** Konstruktor dla stałej liczby*/
@@ -161,9 +164,11 @@ void genValue (valinfo* v, enum reg targetReg) {
             mcRegistry[C] = true; break;
         default:
             mcRegistry[C] = false;
+            mcRegistry[D] = false;
             MCI(new MCE(mLD,v));
             if (targetReg != A) MCI(new MCE(mSWAP,targetReg));
-            mcRegistry[C] = true; break;
+            mcRegistry[C] = true;
+            mcRegistry[D] = true; break;
     }
 }
 
@@ -172,11 +177,16 @@ void genSaveValue (valinfo* v) {
         case NUM:
             yyerrorline("Nie można zapisać stałej!",0); break;
         case ELEM:
-            MCI(new MCE(mSAVE,v)); break; 
+            mcRegistry[C] = false;
+            MCI(new MCE(mSAVE,v)); break;
+            mcRegistry[C] = true;
         default:
             mcRegistry[C] = false;
+            mcRegistry[D] = false;
             MCI(new MCE(mSAVE,v)); 
-            mcRegistry[C] = true; break;
+            mcRegistry[C] = true;
+            mcRegistry[D] = true;
+        break;
     }
 }
 
@@ -212,7 +222,7 @@ void genMinus(exprinfo* e) {
 }
 
 void genCondition(condinfo* c, long long id, enum MCTagTypes conttag, enum MCTagTypes exittag) {
-    genMinus(createExprInfo(c->v1,e_MINUS,c->v2));
+    genMinus(createExprInfo(c->v2,e_MINUS,c->v1));
 
     MCTag t;
     switch(c->type) {
@@ -538,13 +548,16 @@ void genCommand(cominfo* c, long long priority) {
     cominfo* ch;
     long long s;
     long long prevID;
+    enum comInfoType prevcftype;
 
     globalPriority = priority;
     prevID = globalcfID;
+    prevcftype = globalcftype;
 
     switch (c->type) {
         case c_IF:
             globalcfID = c->ID;
+            globalcftype = c->type;
             genCondition(c->ci,c->ID,t_CODE1,t_END);
 
             // gen commands
@@ -555,10 +568,12 @@ void genCommand(cominfo* c, long long priority) {
             }
 
             globalcfID  = prevID;
+            globalcftype = prevcftype;
             t = {t_END,c->ID}; queueTag(t);
             break;
         case c_IFELSE:
             globalcfID = c->ID;
+            globalcftype = c->type;
             genCondition(c->ci,c->ID,t_CODE1,t_CODE2);
 
             // gen commands 1
@@ -579,11 +594,13 @@ void genCommand(cominfo* c, long long priority) {
                 ch = ch->next;
             }
 
+            globalcftype = prevcftype;
             globalcfID  = prevID;
             t = {t_END,c->ID}; queueTag(t);
             break;
         case c_WHILE:
             globalcfID = c->ID;
+            globalcftype = c->type;
             globalPriority++;
 
             t = {t_START,c->ID}; queueTag(t);
@@ -598,11 +615,13 @@ void genCommand(cominfo* c, long long priority) {
 
             MCI(new MCE(mJUMP,t_START,c->ID));
             globalcfID  = prevID;
+            globalcftype = prevcftype;
             globalPriority = priority;
             t = {t_END,c->ID}; queueTag(t);
             break;
         case c_REPEAT:
             globalcfID = c->ID;
+            globalcftype = c->type;
             globalPriority++;
 
             MCI(new MCE(mJUMP,t_CODE1,c->ID));
@@ -618,6 +637,7 @@ void genCommand(cominfo* c, long long priority) {
             
             MCI(new MCE(mJUMP,t_START,c->ID));
             globalPriority = priority;
+            globalcftype = prevcftype;
             globalcfID  = prevID;
             t = {t_END,c->ID}; queueTag(t);
             break;
@@ -625,18 +645,19 @@ void genCommand(cominfo* c, long long priority) {
             genValue(c->ifvar->from,A);
 
             globalcfID = c->ID;
+            globalcftype = c->type;
             globalPriority++;
             MCI(new MCE(mJUMP,t_CODE1,c->ID));
 
             t = {t_START,c->ID}; queueTag(t);
             genValue(c->vi,A);
+            MCI(new MCE(mINC,A));
             t = {t_CODE1, c->ID}; queueTag(t);
             MCI(new MCE(mSWAP,B));
             genValue(c->ifvar->to,A);
             MCI(new MCE(mSUB,B));
             MCI(new MCE(mJNEG,t_END,c->ID));
             MCI(new MCE(mSWAP,B));
-            MCI(new MCE(mINC,A));
             genSaveValue(c->vi);
             
             
@@ -648,6 +669,7 @@ void genCommand(cominfo* c, long long priority) {
             
             MCI(new MCE(mJUMP,t_START,c->ID));
             globalPriority = priority;
+            globalcftype = prevcftype;
             globalcfID  = prevID;
             t = {t_END,c->ID}; queueTag(t);
 
@@ -656,18 +678,20 @@ void genCommand(cominfo* c, long long priority) {
             genValue(c->ifvar->from,A);
 
             globalcfID = c->ID;
+            globalcftype = c->type;
             globalPriority++;
             MCI(new MCE(mJUMP,t_CODE1,c->ID));
             
             t = {t_START,c->ID}; queueTag(t);
             genValue(c->vi,A);
+            MCI(new MCE(mDEC,A));
             t = {t_CODE1, c->ID}; queueTag(t);
             MCI(new MCE(mSWAP,B));
             genValue(c->ifvar->to,A);
             MCI(new MCE(mSUB,B));
             MCI(new MCE(mJPOS,t_END,c->ID));
             MCI(new MCE(mSWAP,B));
-            MCI(new MCE(mDEC,A));
+            
             genSaveValue(c->vi);
             
             ch = *(c->children);
@@ -678,6 +702,7 @@ void genCommand(cominfo* c, long long priority) {
             
             MCI(new MCE(mJUMP,t_START,c->ID));
             globalPriority = priority;
+            globalcftype = prevcftype;
             globalcfID  = prevID;
             t = {t_END,c->ID}; queueTag(t);
         break;
@@ -696,18 +721,22 @@ void genCommand(cominfo* c, long long priority) {
     }
 }
 
+void printTag(MCTag t) {
+    cout<<"(";
+    switch (t.type){
+        case t_START: cout<<"s-"; break;
+        case t_CODE1: cout<<"c-"; break;
+        case t_CODE2: cout<<"z-"; break;
+        case t_END: cout<<"e-"; break;
+    }
+    cout<<t.ID<<") ";
+}
+
 void printMCE(MCE* mc) {
-    cout<<"["<<mc->cfID<<"] ";
+    cout<<"["<<comNames[mc->cftype]<<"] ";
 
     for (auto v: mc->tags) {
-        cout<<"<";
-        switch (v.type){
-            case t_START: cout<<"s-"; break;
-            case t_CODE1: cout<<"c-"; break;
-            case t_CODE2: cout<<"z-"; break;
-            case t_END: cout<<"e-"; break;
-        }
-        cout<<v.ID<<"> ";
+        printTag(v);
     }
 
     cout<<MCinstrName[mc->ins]<<" ";
@@ -717,14 +746,7 @@ void printMCE(MCE* mc) {
             printVal(mc->var->val);
         break;
         case t_TAG: 
-            cout<<"<";
-            switch (mc->var->tag.type){
-                case t_START: cout<<"s-"; break;
-                case t_CODE1: cout<<"c-"; break;
-                case t_CODE2: cout<<"z-"; break;
-                case t_END: cout<<"e-"; break;
-            }
-            cout<<mc->var->tag.ID<<">";
+            printTag(mc->var->tag);
         break;
         case t_REG: cout<<":"<<regName[mc->var->reg]<<":"; break;
     }

@@ -16,6 +16,10 @@ bool hasSymbol(char* symname){
     return varTable.count(string(symname))==1;
 }
 
+bool hasSymbolString(string symname){
+    return varTable.count(symname)==1;
+}
+
 bool putSymbol(char* symname, enum Range r)  {
     string str(symname);
 
@@ -49,6 +53,10 @@ bool putSymbolTable(char* symname, long long start, long long end, enum Range r)
 
 varData* getSymbol(char* symname) {
     return varTable[string(symname)];
+}
+
+varData* getSymbolString(string symname) {
+    return varTable[symname];
 }
 
 bool isInBounds(varData* vd, long long id) {
