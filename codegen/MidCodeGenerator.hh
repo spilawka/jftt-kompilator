@@ -91,11 +91,11 @@ bool mcRegistry[8] = {false,false,true,true,true,true,true,true};
 valinfo* mcRegistryVals[2] = {0,0};
 
 bool isTagQueued = false;
-MCTag queuedTag;
+vector<MCTag> queuedTag;
 
 void queueTag(MCTag tag) {
     isTagQueued = true;
-    queuedTag = tag;
+    queuedTag.push_back(tag);
 }
 
 void modifyMCReg(MCE* e) {
@@ -136,8 +136,10 @@ void modifyMCReg(MCE* e) {
 
 void MCI(MCE* newEntry) {
     if (isTagQueued) {
-        newEntry->addTag(queuedTag);
+        for (auto v: queuedTag)
+            newEntry->addTag(v);
         isTagQueued = false;
+        queuedTag = {};
     }
 
     if (newEntry->hasTags()) {
@@ -221,35 +223,35 @@ void genMinus(exprinfo* e) {
     }
 }
 
-void genCondition(condinfo* c, long long id, enum MCTagTypes conttag, enum MCTagTypes exittag) {
-    genMinus(createExprInfo(c->v2,e_MINUS,c->v1));
+void genCondition(condinfo* c, long long id, enum MCTagTypes posTag, enum MCTagTypes negTag) {
+    genMinus(createExprInfo(c->v1,e_MINUS,c->v2));
 
-    MCTag t;
     switch(c->type) {
         case c_EQ:
-            MCI(new MCE(mJZERO,conttag,id));
-            MCI(new MCE(mJUMP,exittag,id));
+            MCI(new MCE(mJZERO,posTag,id));
+            MCI(new MCE(mJUMP,negTag,id));
         break;
         case c_NEQ:
-            MCI(new MCE(mJZERO,exittag,id));
+            MCI(new MCE(mJZERO,negTag,id));
+            MCI(new MCE(mJUMP,posTag,id));
         break;
         case c_LE:
-            MCI(new MCE(mJNEG,conttag,id));
-            MCI(new MCE(mJUMP,exittag,id));
+            MCI(new MCE(mJNEG,posTag,id));
+            MCI(new MCE(mJUMP,negTag,id));
         break;
         case c_LEQ:
-            MCI(new MCE(mJPOS,exittag,id));
+            MCI(new MCE(mJPOS,negTag,id));
+            MCI(new MCE(mJUMP,posTag,id));
         break;
         case c_GE:
-            MCI(new MCE(mJPOS,conttag,id));
-            MCI(new MCE(mJUMP,exittag,id));
+            MCI(new MCE(mJPOS,posTag,id));
+            MCI(new MCE(mJUMP,negTag,id));
         break;
         case c_GEQ:
-            MCI(new MCE(mJNEG,exittag,id));
+            MCI(new MCE(mJNEG,negTag,id));
+            MCI(new MCE(mJUMP,posTag,id));
         break;
     }
-
-    t = {conttag,id}; queueTag(t);
 }
 
 long long pwrOfTwo(long long n) {
@@ -433,7 +435,7 @@ void genDiv(exprinfo* e) {
         long long n = v2->num;
         long long p = pwrOfTwo(n);
         if (p!=-1) {
-            genValue(makeValinfoNum(p,0),B);
+            genValue(makeValinfoNum(-p,0),B);
             genValue(v1,A);
             MCI(new MCE(mSHIFT,B));
         }
@@ -485,8 +487,8 @@ void genMod(exprinfo* e) {
     }
 
     
-    genValue(e->v2,B);
-    genValue(e->v1,A);
+    genValue(e->v2,F);
+    genValue(e->v1,E);
     mcRegistry[C] = false;
     mcRegistry[D] = false;
     mcRegistry[E] = false;
@@ -549,6 +551,7 @@ void genCommand(cominfo* c, long long priority) {
     long long s;
     long long prevID;
     enum comInfoType prevcftype;
+    char* newSym;
 
     globalPriority = priority;
     prevID = globalcfID;
@@ -558,7 +561,9 @@ void genCommand(cominfo* c, long long priority) {
         case c_IF:
             globalcfID = c->ID;
             globalcftype = c->type;
+
             genCondition(c->ci,c->ID,t_CODE1,t_END);
+            t = {t_CODE1,c->ID}; queueTag(t);
 
             // gen commands
             ch = *(c->children);
@@ -575,6 +580,7 @@ void genCommand(cominfo* c, long long priority) {
             globalcfID = c->ID;
             globalcftype = c->type;
             genCondition(c->ci,c->ID,t_CODE1,t_CODE2);
+            t = {t_CODE1,c->ID}; queueTag(t);
 
             // gen commands 1
             ch = *(c->children);
@@ -605,6 +611,7 @@ void genCommand(cominfo* c, long long priority) {
 
             t = {t_START,c->ID}; queueTag(t);
             genCondition(c->ci,c->ID,t_CODE1,t_END);
+            t = {t_CODE1,c->ID}; queueTag(t);
 
             // gen
             ch = *(c->children);
@@ -626,7 +633,8 @@ void genCommand(cominfo* c, long long priority) {
 
             MCI(new MCE(mJUMP,t_CODE1,c->ID));
             t = {t_START,c->ID}; queueTag(t);
-            genCondition(c->ci,c->ID,t_CODE1,t_END);
+            genCondition(c->ci,c->ID,t_END,t_CODE1);
+            t = {t_CODE1,c->ID}; queueTag(t);
 
             //generate
             ch = *(c->children);
@@ -639,14 +647,22 @@ void genCommand(cominfo* c, long long priority) {
             globalPriority = priority;
             globalcftype = prevcftype;
             globalcfID  = prevID;
+
             t = {t_END,c->ID}; queueTag(t);
             break;
         case c_FORTO:
-            genValue(c->ifvar->from,A);
+            
 
             globalcfID = c->ID;
             globalcftype = c->type;
             globalPriority++;
+
+            //zapisz górny zakres pętli
+            genValue(c->ifvar->to,A);
+            newSym = generateProcSymbol();
+            genSaveValue(makeValinfoElem(newSym,c->line));
+            genValue(c->ifvar->from,A);
+ 
             MCI(new MCE(mJUMP,t_CODE1,c->ID));
 
             t = {t_START,c->ID}; queueTag(t);
@@ -654,7 +670,7 @@ void genCommand(cominfo* c, long long priority) {
             MCI(new MCE(mINC,A));
             t = {t_CODE1, c->ID}; queueTag(t);
             MCI(new MCE(mSWAP,B));
-            genValue(c->ifvar->to,A);
+            genValue(makeValinfoElem(newSym,c->line),A);
             MCI(new MCE(mSUB,B));
             MCI(new MCE(mJNEG,t_END,c->ID));
             MCI(new MCE(mSWAP,B));
@@ -675,11 +691,18 @@ void genCommand(cominfo* c, long long priority) {
 
         break;
         case c_FORDOWNTO:
-            genValue(c->ifvar->from,A);
+            
 
             globalcfID = c->ID;
             globalcftype = c->type;
             globalPriority++;
+
+            //zapisz dolny zakres pętli
+            genValue(c->ifvar->to,A);
+            newSym = generateProcSymbol();
+            genSaveValue(makeValinfoElem(newSym,c->line));
+            genValue(c->ifvar->from,A);
+            
             MCI(new MCE(mJUMP,t_CODE1,c->ID));
             
             t = {t_START,c->ID}; queueTag(t);
@@ -687,7 +710,7 @@ void genCommand(cominfo* c, long long priority) {
             MCI(new MCE(mDEC,A));
             t = {t_CODE1, c->ID}; queueTag(t);
             MCI(new MCE(mSWAP,B));
-            genValue(c->ifvar->to,A);
+            genValue(makeValinfoElem(newSym,c->line),A);
             MCI(new MCE(mSUB,B));
             MCI(new MCE(mJPOS,t_END,c->ID));
             MCI(new MCE(mSWAP,B));

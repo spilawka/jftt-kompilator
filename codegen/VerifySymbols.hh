@@ -80,7 +80,14 @@ void checkVariables(cominfo* c) {
                     yyerrorline("Niezadeklarowana zmienna "+string(c->vi->varName),c->line);
             }
             else {
-                getSymbol(c->vi->varName)->init = true;
+                varData* v = getSymbol(c->vi->varName);
+
+                if (v->range == LOCAL) {
+                    yyerrorline("Niedozwolona modyfikacja zmiennej "+string(c->vi->varName),c->line);
+                }
+                else {
+                    getSymbol(c->vi->varName)->init = true;
+                }
             }
             checkVal(c,c->vi);
             checkExpr(c,c->ei);

@@ -247,6 +247,7 @@ int main() {
   /*for (auto v: midCode) {
     printMCE(v);
   }*/
+  //printSymbols();
   generateSymbolLocationTable(midCode);
   generateMCA(midCode);
   generateMR(midCodeAllocated);

@@ -1,3 +1,4 @@
+#include <stdlib.h>
 enum Range {GLOBAL,LOCAL};
 
 struct varData {
@@ -32,6 +33,17 @@ bool putSymbol(char* symname, enum Range r)  {
     s->init = false;
     varTable[str] = s;
     return true;
+}
+
+long long procSymbolIndex = 0;
+char* generateProcSymbol() {
+    //10^67 zmiennych just in case
+    char* s = (char*) malloc(69*sizeof(char));
+    sprintf(s,"X%lld",procSymbolIndex);
+    
+    if(!putSymbol(s,LOCAL)) yyerror("Krytyczny błąd przy generowaniu zmiennej.");
+    procSymbolIndex++;
+    return s;
 }
 
 bool putSymbolTable(char* symname, long long start, long long end, enum Range r) {

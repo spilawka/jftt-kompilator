@@ -67,7 +67,6 @@ void OCinsert(enum instr in, MRReference rf) {
 }
 
 void printMRCode() {
-    cout<<endl;
     for (auto p: outputCode) {
         for (MCTag t: p.first.tags) printTag(t);
         cout<<instrName[p.first.ins]<<" ";
@@ -93,7 +92,7 @@ void linkTags() {
         if (p.second.type == r_TAG) {
             MCTag t = p.second.tag;
             long long l = tagLoc[make_pair(t.type,t.ID)];
-            if (l==0) yyerror("MCtoMR: Brak tagu.");
+            if (l==0) yyerror("MCtoMR: Brak tagu " + to_string(t.ID));
 
             outputCode.at(lines-1) = make_pair(p.first,MRReference(l-lines));
         }
