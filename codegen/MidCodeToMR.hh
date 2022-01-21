@@ -33,10 +33,10 @@ public:
         this->reg = reg;
     }
 
-    void exportRef() {
+    void exportR(ofstream f) {
         switch(type){
-            case r_NUM: cout<<num; break;
-            case r_REG: cout<<regName[reg]; break;
+            case r_NUM: f<<num; break;
+            case r_REG: f<<regName[reg]; break;
             case r_TAG: yyerror("Nie można exportować tagu!"); break;
             case r_VOID: break;
         }
@@ -73,6 +73,27 @@ void printMRCode() {
         p.second.printRef();
         cout<<endl;
     }
+}
+
+void exportMRCode(char* infile, char* outfile) {
+    ofstream f(outfile);
+    if (!f) {
+        cout<<"Błąd przy eksporcie pliku!"<<endl;
+        exit(-1);
+    }
+
+    f<<"("<<infile<<")"<<endl;
+    for (auto p: outputCode) {
+        f<<instrName[p.first.ins]<<" ";
+        switch(p.second.type){
+            case r_NUM: f<<p.second.num; break;
+            case r_REG: f<<regName[p.second.reg]; break;
+            case r_TAG: yyerror("Nie można exportować tagu!"); break;
+            case r_VOID: break;
+        }
+        f<<endl;
+    }
+    f.close();
 }
 
 void linkTags() {
@@ -365,5 +386,5 @@ void generateMR(vector<pair<MCInstr,MCDest>> MCA) {
     }
     //printMRCode();
     linkTags();
-    printMRCode();
+    //printMRCode();
 }

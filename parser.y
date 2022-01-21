@@ -15,6 +15,8 @@
   long long condID = 1;
   extern int yylineno;
 
+  extern FILE *yyin;
+
   #include "VMInstructions.hh"
   #include "SymbolTable.hh"
   #include "nterms/valinfo.hh"
@@ -230,8 +232,22 @@ void yyerror(string s) {
     exit(-1);
 }
 
-int main() {
+int main(int argn, char** args) {
+  if (argn != 3) {
+    cout<<"Błędna ilość argumentów!!!"<<endl;
+    cout<<"   kompilator plik_wejściowy plik_wyjściowy"<<endl;
+    return -1;
+  }
+
+
+  yyin = fopen(args[1],"r");
+  if (!yyin) {
+    cout<<"Błąd przy otwieraniu pliku "<<args[1]<<"!"<<endl;
+    return -1;
+  }
+
   yyparse();
+  fclose(yyin);
   //printSymbols();
   //printChildren(root,0);
   cfID = 0;
@@ -251,4 +267,5 @@ int main() {
   generateSymbolLocationTable(midCode);
   generateMCA(midCode);
   generateMR(midCodeAllocated);
+  exportMRCode(args[1],args[2]);
 }
