@@ -1,14 +1,18 @@
+//Szymon Pilawka 254649
 #include <stack>
 #include <algorithm>
 #include "MidCodeInstructions.hh"
 
+/** Rodzaj tagów (wskaźników na instrukcje) */
 enum MCTagTypes {t_START,t_END,t_CODE1,t_CODE2};
+/** Tag wskazujący na dane miejsce w kodzie */
 struct MCTag {
     enum MCTagTypes type;
     long long ID;
 };
 typedef struct MCTag MCTag;
 
+/** Rodzaj argumentu */
 enum MCVarTypes {t_VAL,t_TAG,t_REG};
 struct MCVar {
     enum MCVarTypes type;
@@ -18,10 +22,13 @@ struct MCVar {
 };
 typedef struct MCVar MCVar;
 
+/** Priorytet control flow */
 long long globalPriority = 0;
+/** ID control flow */
 long long globalcfID = cfID;
 enum comInfoType globalcftype;
 
+/** klasa przechowuje informację o argumencie danej instrukcji kodu pośredniego */
 class MCE {
 public:
     vector<MCTag> tags;
@@ -84,6 +91,7 @@ public:
 };
 typedef class MCE MCE;
 
+/** Instrukcje kodu pośredniego */
 vector<MCE*> midCode;
 /** Określenie czy dane rejestry są dostępne */
 bool mcRegistry[8] = {false,false,true,true,true,true,true,true};
@@ -98,6 +106,7 @@ void queueTag(MCTag tag) {
     queuedTag.push_back(tag);
 }
 
+/** Sprawdź czy instrukcja modyfikuje rejestr w sposób który nie da się przydzielić zmiennej */
 void modifyMCReg(MCE* e) {
     valinfo* t;
     switch (e->ins) {
@@ -134,6 +143,7 @@ void modifyMCReg(MCE* e) {
     }
 }
 
+/** Wstaw instrukcję do kodu pośredniego*/
 void MCI(MCE* newEntry) {
     if (isTagQueued) {
         for (auto v: queuedTag)
@@ -154,6 +164,7 @@ void MCI(MCE* newEntry) {
     midCode.push_back(newEntry);
 }
 
+/** Utwórz kod użycia zmiennej */
 void genValue (valinfo* v, enum reg targetReg) {
     //zmienna znajdzie się w rejestrze
     if (targetReg <= 1) mcRegistryVals[targetReg] = v;
@@ -174,6 +185,7 @@ void genValue (valinfo* v, enum reg targetReg) {
     }
 }
 
+/** Utwórz kod zapisania zmiennej */
 void genSaveValue (valinfo* v) {
     switch (v->type) {
         case NUM:
@@ -192,6 +204,7 @@ void genSaveValue (valinfo* v) {
     }
 }
 
+/** Utwórz kod operacji minus */
 void genMinus(exprinfo* e) {
     long long val;
     //zero
@@ -223,6 +236,7 @@ void genMinus(exprinfo* e) {
     }
 }
 
+/** Utwórz kod warunku */
 void genCondition(condinfo* c, long long id, enum MCTagTypes posTag, enum MCTagTypes negTag) {
     genMinus(createExprInfo(c->v1,e_MINUS,c->v2));
 
@@ -254,6 +268,7 @@ void genCondition(condinfo* c, long long id, enum MCTagTypes posTag, enum MCTagT
     }
 }
 
+/** Sprawdź czy n jest potęgą dwójki */
 long long pwrOfTwo(long long n) {
     if (n==0) return -1;
     long long p = 0;
@@ -266,6 +281,7 @@ long long pwrOfTwo(long long n) {
     return p;
 }
 
+/** Utwórz kod operacji mnożenia */
 void genTimes(exprinfo* e) {
     valinfo* v1 = e->v1;
     valinfo* v2 = e->v2;
@@ -422,6 +438,7 @@ void genTimes(exprinfo* e) {
     mcRegistry[G] = true;
 }
 
+/** Utwórz kod operacji dzielenia */
 void genDiv(exprinfo* e) {
     valinfo* v1 = e->v1;
     valinfo* v2 = e->v2;
@@ -456,6 +473,7 @@ void genDiv(exprinfo* e) {
     mcRegistry[G] = true;
 }
 
+/** Utwórz kod operacji modulo */
 void genMod(exprinfo* e) {
     valinfo* v1 = e->v1;
     valinfo* v2 = e->v2;
@@ -503,6 +521,7 @@ void genMod(exprinfo* e) {
     mcRegistry[G] = true;
 }
 
+/** Utwórz kod wyrażenia */
 void genExpression(exprinfo* e) {
     long long val;
     switch (e->type) {
@@ -545,6 +564,7 @@ void genExpression(exprinfo* e) {
     }
 }
 
+/** Przetwórz kod danego polecenia z kodu .imp */
 void genCommand(cominfo* c, long long priority) {
     MCTag t;
     cominfo* ch;
@@ -744,6 +764,7 @@ void genCommand(cominfo* c, long long priority) {
     }
 }
 
+/** Wypisz tag na stdout */
 void printTag(MCTag t) {
     cout<<"(";
     switch (t.type){
@@ -755,6 +776,7 @@ void printTag(MCTag t) {
     cout<<t.ID<<") ";
 }
 
+/** Wypisz kod pośredni */
 void printMCE(MCE* mc) {
     cout<<"["<<comNames[mc->cftype]<<"] ";
 

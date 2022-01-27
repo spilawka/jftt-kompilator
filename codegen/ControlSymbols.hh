@@ -1,3 +1,4 @@
+//Szymon Pilawka 254649
 /** Funkcje w nagłówku odpowiadają za przydział rejestrów oraz pamięci dla zmiennych */
 
 #include<queue>
@@ -14,14 +15,18 @@ typedef pair<string,long long> varprio;
 auto cmp = [](varprio p1, varprio p2) { return p1.second < p2.second; };
 priority_queue<varprio, vector<varprio>, decltype(cmp)> varPriority(cmp);
 
+/** Zarezerwowane w pamięci miejsce */
 long long allocmem = 0;
 
+/** Instrukcja kodu pośredniego*/
 struct MCInstr {
     vector<MCTag> tags;
     enum MCinstr instr;
 };
 
+/** Rodzaj docelowego argumentu*/
 enum destTypes {d_EMPTY, d_1VAR, d_2VAR, d_REG, d_CONST, d_TAG};
+/** Docelowy argument */
 class MCDest {
 public:
     enum destTypes type;
@@ -76,12 +81,15 @@ public:
     }
 };
 
+/** Kod pośredni z konkretnymi wskaźnikami zmiennych*/
 vector<pair<MCInstr,MCDest>> midCodeAllocated;
 
+/** Funkcja dodaje instrukcję oraz argument do midCodeAllocated */
 void MCApush(MCInstr mi, MCDest md) {
     midCodeAllocated.push_back(make_pair(mi,md));
 }
 
+/** Funkcja przekształca kod pośredni na kod pośredni z alokacjami */
 void MCtoMCAllo(vector<MCE*> midcode) {
     valinfo* v;
     for (MCE* m: midcode) {
@@ -121,6 +129,7 @@ void MCtoMCAllo(vector<MCE*> midcode) {
     }
 }
 
+/** Wyświetl kod pośredni z alokacjami na stdout */
 void printMCA() {
     for (pair<MCInstr,MCDest> p: midCodeAllocated) {
         for (auto t: p.first.tags) printTag(t);
@@ -131,7 +140,9 @@ void printMCA() {
 
 }
 
+/** Rodzaj przechowywania zmiennej */
 enum memLocType {m_REG, m_MEM, m_CONST};
+/** Klasa przechowuje informacje jak dany argument ma zostać przechowany */
 class memLoc {
 public:
     enum memLocType type;
@@ -168,8 +179,10 @@ public:
     }
 };
 
+/** Mapa zapamiętująca miejsce przechowywania zmiennej */
 map<string,class memLoc> varMemLoc;
 
+/** Wyświetl lokalizację zmiennych */
 void printvarLocType() {
     for (auto const&a: varMemLoc) {
         cout<<a.first<<" ";
@@ -182,6 +195,7 @@ void printvarLocType() {
     }
 }
 
+/** Przydziel miejsce w pamięci bądź w rejestrze danej zmiennej */
 void allocateVars(vector<MCE*> midcode) {
     while (!varPriority.empty()) {
         //pobierz zmienną nieprzetworzoną o największym priorytecie
@@ -231,6 +245,7 @@ void allocateVars(vector<MCE*> midcode) {
     }
 }
 
+/** Oblicz priorytet zmiennej (zmienne z wyższym priorytetem pierwsze są alokowane) */
 void calculateVarPriority(map<string,vector<long long>> vu, vector<MCE*> midcode) {
     for (auto const& v: vu) {
         long long p = 0;
@@ -241,6 +256,7 @@ void calculateVarPriority(map<string,vector<long long>> vu, vector<MCE*> midcode
     }
 }
 
+/** Oblicz zasięg występowania zmiennej*/
 void calculateVarRange(map<string,vector<long long>> vu, vector<MCE*> midcode) {
     for (auto const&v: vu) {
         long long min = numeric_limits<long long int>::max();
@@ -272,6 +288,7 @@ void calculateVarRange(map<string,vector<long long>> vu, vector<MCE*> midcode) {
     //calculateVarPriority(vu,midcode);
 }
 
+/** Pobierz występowania zmiennych z kodu pośredniego */
 void getVarUsage(vector<MCE*> midcode) {
     long long line = 0;
     for (MCE* m: midcode) {
@@ -313,6 +330,7 @@ void getVarUsage(vector<MCE*> midcode) {
     //calculateVarRange(varUsage,midcode);
 }
 
+/** Wylicz zasięg pętli oraz ifów */
 void calculatecfRange(vector<MCE*> midcode) {
     long long line = 0;
 
@@ -334,6 +352,7 @@ void calculatecfRange(vector<MCE*> midcode) {
     }*/
 }
 
+/** Wygeneruj tablicę z alokacją zmiennych */
 void generateSymbolLocationTable(vector<MCE*> midcode) {
     calculatecfRange(midcode);
     getVarUsage(midcode);

@@ -1,3 +1,4 @@
+/** Instrukcje kodu pośredniego */
 enum MCinstr {
     mREAD, mWRITE, mSAVE, mADD, mSUB, mSHIFT, mSWAP, mRESET, mINC, mDEC, mJUMP, mJPOS, mJZERO, mJNEG, mLD, mTIMES, mDIV, mMOD, mHALT
 };

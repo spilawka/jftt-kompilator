@@ -1,12 +1,21 @@
+//Szymon Pilawka 254649
+/*
+Plik zawiera funkcje zamieniające kod pośredni określony w pliku MidCodeInstructions.hh
+na kod maszynowy MR
+*/
+
 #include <fstream>
 #include <stdlib.h>
 
+/** Encja przechowująca informację o instrukcji w kodzie wyjściowym */
 struct MRIns {
     vector<MCTag> tags;
     enum instr ins;
 };
 
+/** Rodzaje argumentów instrukcji wyjściowej. Kolejno: Numer, rejestr, tag, nic */
 enum MRRefType {r_NUM,r_REG,r_TAG,r_VOID};
+/** Klasa przechowuje informację o argumencie w instrukcji wyjściowej MR */
 class MRReference {
 public:
     MRRefType type;
@@ -54,9 +63,12 @@ public:
 };
 typedef class MRReference MRReference;
 
+/** Kod wyjściowy MR z tagami */
 vector<pair<struct MRIns, MRReference>> outputCode;
+/** Kolejka tagów - używana przy usuwaniu/optymalizacji kodu*/
 vector<MCTag> queuedTags = {};
 
+/** Funkcja wstawia instrukcję z argumentem do kolejki oraz dodaje tagi z kolejki */
 void OCinsert(enum instr in, MRReference rf) {
     struct MRIns newe = {{},in};
     if (!queuedTags.empty()) {
@@ -66,6 +78,7 @@ void OCinsert(enum instr in, MRReference rf) {
     outputCode.push_back(make_pair(newe,rf));
 }
 
+/** Funkcja wyświetla kod maszynowy na stdout */
 void printMRCode() {
     for (auto p: outputCode) {
         for (MCTag t: p.first.tags) printTag(t);
@@ -75,6 +88,10 @@ void printMRCode() {
     }
 }
 
+/** Funkcja eksportuje przechowywany w programie kod maszynowy
+ * @param infile plik wejściowy (komentarz na początku pliku)
+ * @param outfile plik wyjściowy
+ **/
 void exportMRCode(char* infile, char* outfile) {
     ofstream f(outfile);
     if (!f) {
@@ -96,6 +113,7 @@ void exportMRCode(char* infile, char* outfile) {
     f.close();
 }
 
+/** Funkcja łączy tagi (oblicza różnicę pomiędzy tagami i przeskokami i zapamiętuje) */
 void linkTags() {
     map<pair<MCTagTypes,long long>,long long> tagLoc;
 
@@ -120,6 +138,7 @@ void linkTags() {
     }
 }
 
+/** Stos używany do utworzenia instrukcji generowania numerów */
 typedef stack<pair<enum instr, enum reg>> insstack;
 /** Funkcja zwraca kod do generowania danej liczby od podstaw w kodzie maszynowym 
 
@@ -200,6 +219,8 @@ void genNumber(long long num) {
    code = {};
 }
 
+/** Funkcja importuje kod maszynowy z pliku
+ * Używana dla poleceń DIV,MOD,MULT */
 void injectFilesCode(string filename) {
     ifstream f(filename);
     
@@ -221,6 +242,7 @@ void injectFilesCode(string filename) {
     }
 }
 
+/** Funkcja interpretuje polecenie kodu pośredniego na kod maszynowy z tagami */
 void interpretIns(pair<struct MCInstr, class MCDest> p) {
     queuedTags = p.first.tags;
     class MCDest d = p.second;
@@ -380,6 +402,9 @@ void interpretIns(pair<struct MCInstr, class MCDest> p) {
     }
 }
 
+/** Funkcja generuje kod maszynowy używając istniejących funkcji
+ * @param MCA Kod pośredni z Argumentami
+ **/
 void generateMR(vector<pair<MCInstr,MCDest>> MCA) {
     for (auto p: MCA) {
         interpretIns(p);

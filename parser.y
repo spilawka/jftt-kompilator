@@ -1,4 +1,6 @@
 %{
+  //Szymon Pilawka 254649
+
   #include <stdio.h>
   #include <string>
   #include <stdbool.h>
@@ -11,6 +13,7 @@
   int yylex(void);
   void yyerror(string);
   void yyerrorline(string,long long);
+  /** ID control flow - używane do tworzenia tagów */
   long long cfID = 0;
   long long condID = 1;
   extern int yylineno;

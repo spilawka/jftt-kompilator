@@ -1,3 +1,6 @@
+//Szymon Pilawka 254649
+/** Plik definiuje strukturę przechowującą zmienne z programu */
+
 #include <string.h>
 enum valInfoType {NUM,ELEM,TELEM,TELEMID};
 
@@ -13,6 +16,8 @@ struct valinfo {
 typedef struct valinfo valinfo;
 
 vector<valinfo*> valInfos = {};
+
+//różne "konstruktory"
 
 valinfo* makeValinfoNum(long long value, long long line){
     valinfo* vi = new valinfo();

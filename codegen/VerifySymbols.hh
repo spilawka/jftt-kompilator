@@ -1,3 +1,7 @@
+//Szymon Pilawka 254649
+/** Funkcje sprawdzają poprawność użycia zmiennych z tablicy symboli */
+
+/** Sprawdź czy wartość została użyta poprawnie*/
 void checkVal(cominfo* c, valinfo* v) {
     if (v->type == NUM) return;
 
@@ -55,16 +59,19 @@ void checkVal(cominfo* c, valinfo* v) {
     }
 }
 
+/** Sprawdź zmienne z wyrażenia */
 void checkExpr(cominfo* c, exprinfo* e) {
     checkVal(c,e->v1);
     if (e->type != e_SOLO) checkVal(c,e->v2);
 }
 
+/** Sprawdź zmienne z warunku */
 void checkCond(cominfo* c, condinfo* e) {
     checkVal(c,e->v1);
     checkVal(c,e->v2);
 }
 
+/** Sprawdź wszystkie zmienne w instrukcji */
 void checkVariables(cominfo* c) {
     if (c==0) return;
     

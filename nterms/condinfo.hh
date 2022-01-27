@@ -1,3 +1,6 @@
+//Szymon Pilawka 254649
+/** Plik implementuje strukturę przechowującą informację o warunkach */
+
 enum condInfoTypes {c_EQ,c_NEQ,c_LE,c_GE,c_LEQ,c_GEQ};
 
 struct condinfo {

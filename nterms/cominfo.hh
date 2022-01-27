@@ -1,4 +1,5 @@
 //Szymon Pilawka
+/** Plik implementuje strukturę przechowującą informacje o poleceniach */
 #include<string.h>
 
 /* Typ wyliczeniowy przechowuje informacje jaką komende przechowuje struktura */

@@ -1,3 +1,6 @@
+//Szymon Pilawka 254649
+/** Plik zawiera definicji encji przechowującej informacje o danym wyrażeniu z programu */
+/** Rodzaje wyrażeń */
 enum exprInfoTypes {e_SOLO,e_MINUS,e_PLUS,e_TIMES,e_DIV,e_MOD};
 
 struct exprinfo {
