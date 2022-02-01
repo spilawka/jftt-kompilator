@@ -27,6 +27,7 @@
   #include "nterms/condinfo.hh"
   #include "nterms/cominfo.hh"
   #include "codegen/MidCodeGenerator.hh"
+  #include "codegen/OptimizeMC.hh"
   #include "codegen/VerifySymbols.hh"
   #include "codegen/ControlSymbols.hh"
   #include "codegen/MidCodeToMR.hh"
@@ -256,17 +257,21 @@ int main(int argn, char** args) {
   cfID = 0;
   checkVariables(root);
 
+  //generowanie kodu pośredniego
   cominfo* ch = *(root->children);
     while (ch!=0) {
       genCommand(ch,0);
       ch = ch->next;
   }
   MCI(new MCE(mHALT,A));
+  optimizeMC();
 
-  /*for (auto v: midCode) {
+  /*
+  for (auto v: midCode) {
     printMCE(v);
   }*/
   //printSymbols();
+
   generateSymbolLocationTable(midCode);
   generateMCA(midCode);
   generateMR(midCodeAllocated);

@@ -32,6 +32,7 @@ Pliki:
         VerifySymbols.hh - sprawdź poprawność użycia symboli w kodzie wejściowym
         MidCodeInstructions.hh - instrukcje kodu pośredniego
         MidCodeGenerator.hh - generator kodu pośredniego
+        OptimizeMC.hh - optymalizacja kodu pośredniego
         ControlSymbols.hh - alokacja zmiennych
         MidCodeToMR.hh - przekształć kod pośredni na wyjściowy
     
